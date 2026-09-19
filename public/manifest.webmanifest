@@ -1,0 +1,11 @@
+{
+  "name": "TalkAlotta",
+  "short_name": "TalkAlotta",
+  "description": "Adaptive AAC communication boards",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": []
+}
