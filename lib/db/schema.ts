@@ -109,6 +109,32 @@ export const wordSymbols = sqliteTable(
   (t) => ({ termIdx: uniqueIndex('word_symbols_term_idx').on(t.term) }),
 );
 
+/**
+ * Folders the caregiver has taken off the board. Built-in folders are not
+ * deleted, only hidden, so turning one back on is possible later.
+ */
+export const hiddenFolders = sqliteTable(
+  'hidden_folders',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    folderId: text('folder_id').notNull(),
+    hiddenAt: text('hidden_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => ({ folderIdx: uniqueIndex('hidden_folders_idx').on(t.folderId) }),
+);
+
+/**
+ * Words the caregiver has added to a built-in folder, through the add button
+ * inside it. Saved situation folders keep their words in board_items instead.
+ */
+export const folderWords = sqliteTable('folder_words', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  folderId: text('folder_id').notNull(),
+  term: text('term').notNull(),
+  role: text('role').notNull().default('object'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 /** Uploaded pictures, stored as bytes so there is no filesystem dependency. */
 export const uploads = sqliteTable('uploads', {
   id: integer('id').primaryKey({ autoIncrement: true }),

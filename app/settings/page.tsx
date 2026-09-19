@@ -78,7 +78,7 @@ export default function SettingsPage() {
   }, [gapPx, gridIndex, load, vision]);
 
   return (
-    <main className="safe-top safe-bottom mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-6 p-5">
+    <main className="page-light safe-top safe-bottom mx-auto flex w-full max-w-3xl flex-col gap-6 p-5">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Settings</h1>
         <Link href="/board" className="text-sm font-semibold underline">

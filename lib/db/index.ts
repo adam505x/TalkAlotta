@@ -98,6 +98,21 @@ function createTables(sqlite: Database.Database) {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS word_symbols_term_idx ON word_symbols(term);
 
+    CREATE TABLE IF NOT EXISTS hidden_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      folder_id TEXT NOT NULL,
+      hidden_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS hidden_folders_idx ON hidden_folders(folder_id);
+
+    CREATE TABLE IF NOT EXISTS folder_words (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      folder_id TEXT NOT NULL,
+      term TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'object',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS uploads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       mime TEXT NOT NULL,

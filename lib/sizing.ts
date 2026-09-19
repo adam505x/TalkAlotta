@@ -25,15 +25,25 @@ export interface GridPreset {
 
 /**
  * Grid ladder, biggest buttons first. Index 0 is the largest button size.
- * The range is 4x3 (12 buttons) up to 6x5 (30 buttons); the larger number is
- * always the column count.
+ *
+ * The column count alone decides how big every tile is, because a tile's height
+ * comes from its fixed aspect ratio rather than from the space available. So this
+ * one number sets the size of every button on the board, in the fixed top row and
+ * in the grid alike.
+ *
+ * Seven columns is the floor: the fixed core block is seven wide, and both grids
+ * have to share a column width for their tiles to come out the same size.
+ *
+ * `rows` counts only the folder grid underneath. The three core rows sit above it
+ * and are never paginated, so the row counts here are kept low enough that the
+ * whole board fits a landscape tablet without scrolling.
  */
 export const GRID_PRESETS: GridPreset[] = [
-  { cols: 4, rows: 3 }, // 12 buttons, biggest
-  { cols: 5, rows: 3 }, // 15
-  { cols: 5, rows: 4 }, // 20
-  { cols: 6, rows: 4 }, // 24
-  { cols: 6, rows: 5 }, // 30 buttons, smallest
+  { cols: 7, rows: 1 }, // biggest buttons
+  { cols: 8, rows: 2 },
+  { cols: 9, rows: 2 },
+  { cols: 9, rows: 3 },
+  { cols: 10, rows: 3 }, // smallest buttons
 ];
 
 export const MAX_GRID_INDEX = GRID_PRESETS.length - 1;
@@ -121,5 +131,6 @@ export function capacityAt(index: number): number {
 
 export function describePreset(index: number): string {
   const p = presetAt(index);
-  return `${p.cols} across, ${p.rows} down (${p.cols * p.rows} buttons)`;
+  const core = 3 * p.cols;
+  return `${p.cols} across, ${p.rows + 3} down (${core + p.cols * p.rows} buttons)`;
 }

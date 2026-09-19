@@ -25,14 +25,18 @@ const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5';
 
 const VALID_ROLES: WordRole[] = ['object', 'action', 'feeling', 'place', 'modifier', 'core'];
 
-const SYSTEM_PROMPT = `You turn a phrase used in an AAC (augmentative and alternative communication) setting into concepts to look up in a picture-symbol library.
+const SYSTEM_PROMPT = `You build a communication board for a moment described in plain language. The board is for someone who communicates with picture symbols, so you return concepts to look up in a picture-symbol library.
+
+Return the words this person would actually NEED in that moment, not only the words the description happens to contain. A description of art class should give paint, brush, paper, apron, draw and colour, not just the two things that were named. Think about what they might want to ask for, refuse, comment on or choose between.
 
 Rules:
-- Return 2 to 8 concepts, most important first.
+- Return 8 to 14 concepts, most important first.
+- Include the things named in the description AND the other things present in that moment: the objects to hand, the actions likely to be taken, the choices on offer, and the feelings that might come up.
 - Each term must be concrete and picturable, the kind of word a symbol library indexes: "paint brush", "drink", "toilet", "angry".
 - Keep compound nouns intact: "paint brush", never "paint" plus "brush".
 - Split genuinely separate ideas into separate concepts.
 - Drop filler, possession and politeness words: i, need, my, the, please, a.
+- Do not include: want, more, help, stop, finished, yes, no, I, you, go, like, do, put, give, good, what, where, who. Those are already fixed on the board.
 - role is one of:
   object   a thing
   action   something done
@@ -113,7 +117,7 @@ function tidyConcepts(raw: { term: string; role: string; modifies: string | null
       role: VALID_ROLES.includes(role) ? role : 'object',
       modifies: c?.modifies ? String(c.modifies).trim().toLowerCase() : null,
     });
-    if (out.length >= 8) break;
+    if (out.length >= 14) break;
   }
   return out;
 }
@@ -143,7 +147,7 @@ export async function interpretScenario(scenario: string): Promise<Interpretatio
 
   const response = await getClient().messages.parse({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 2048,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: text }],
     output_config: { format: jsonSchemaOutputFormat(CONCEPT_SCHEMA) },

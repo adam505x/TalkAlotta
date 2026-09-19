@@ -465,7 +465,8 @@ export default function OnboardingPage() {
   const stepNumber = stepIndex + 1;
 
   return (
-    <main className="safe-top safe-bottom mx-auto flex h-dvh w-full max-w-6xl flex-col gap-4 overflow-hidden p-5 lg:gap-5 lg:p-6">
+    <div className="page-light h-dvh overflow-hidden">
+    <main className="safe-top safe-bottom mx-auto flex h-full w-full max-w-6xl flex-col gap-4 overflow-hidden p-5 lg:gap-5 lg:p-6">
       <header className="flex shrink-0 flex-col gap-3">
         <p
           className="text-[13px] font-semibold uppercase"
@@ -1050,5 +1051,6 @@ export default function OnboardingPage() {
         </div>
       ) : null}
     </main>
+    </div>
   );
 }

@@ -5,21 +5,26 @@ export const metadata: Metadata = {
   title: 'TalkAlotta',
   description: 'Adaptive AAC communication boards that learn with the communicator.',
   manifest: '/manifest.webmanifest',
+  // The Home Screen icon. Without a real PNG, iOS screenshots the page instead.
   icons: {
-    icon: '/icon-192.png',
-    apple: '/apple-touch-icon.png',
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/icon-180.png', sizes: '180x180', type: 'image/png' }],
   },
   appleWebApp: {
     capable: true,
     title: 'TalkAlotta',
-    statusBarStyle: 'default',
+    // 'black-translucent' lets the board run under the status bar, which is what
+    // the safe-area padding in globals.css is there to keep clear of.
+    statusBarStyle: 'black-translucent',
   },
   other: {
-    // Next renders the modern `mobile-web-app-capable` for appleWebApp.capable
-    // and no longer emits the Apple-prefixed one. Safari still reads the legacy
-    // name, and without it an icon added to the Home Screen can open in a normal
-    // tab with the address bar showing. Belt and braces alongside the
-    // manifest's display: standalone.
+    // Next emits the modern `mobile-web-app-capable`, but iOS before 17 only
+    // understands the Apple-prefixed one, and that is the version that decides
+    // whether the browser bars show. Harmless on newer iOS, which uses the
+    // manifest's display mode instead.
     'apple-mobile-web-app-capable': 'yes',
   },
 };
@@ -33,7 +38,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#ffffff',
+  themeColor: '#1c1f24',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

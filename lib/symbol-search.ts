@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
-import { getTwemojiMatch, normalizeKeyword, searchSymbolTerm, type SymbolResult } from './opensymbols';
+import { normalizeKeyword, searchSymbolTerm, type SymbolResult } from './opensymbols';
+import { searchArasaac } from './arasaac';
 import { db, schema } from './db';
 import type { WordRole } from './core-words';
 
@@ -21,13 +22,19 @@ import type { WordRole } from './core-words';
 
 const LOCALE = process.env.OPENSYMBOLS_LOCALE || 'en';
 
-/** Source trust, highest first. Mulberry and Tawasol are cleaner AAC artwork. */
+/**
+ * Source trust, highest first.
+ *
+ * ARASAAC leads because every board should look like one set of pictures rather
+ * than a mixture of drawing styles. Emoji are demoted hard for the same reason:
+ * a single emoji among pictograms stands out as the odd one, whatever it depicts.
+ */
 const SOURCE_TRUST: Record<string, number> = {
-  mulberry: 1.0,
-  tawasol: 0.95,
-  twemoji: 0.8,
-  opensymbols: 0.75,
-  arasaac: 0.6,
+  arasaac: 1.0,
+  mulberry: 0.9,
+  tawasol: 0.85,
+  opensymbols: 0.78,
+  twemoji: 0.5,
 };
 
 /**
@@ -73,8 +80,25 @@ export interface ConceptMatch {
 /** Below this, never silently accept: surface it for the caregiver to confirm. */
 export const CONFIDENCE_THRESHOLD = 0.55;
 
+/**
+ * Light singular/plural folding so "swings" matches a pictogram named "swing".
+ *
+ * Without this the scorer rejected an exact pictogram purely on a trailing s,
+ * which is the wrong reason to send a caregiver to the review step.
+ */
+function stem(token: string): string {
+  if (token.length > 4 && token.endsWith('ies')) return `${token.slice(0, -3)}y`;
+  if (token.length > 4 && (token.endsWith('ches') || token.endsWith('shes') || token.endsWith('sses')))
+    return token.slice(0, -2);
+  if (token.length > 3 && token.endsWith('s') && !token.endsWith('ss')) return token.slice(0, -1);
+  return token;
+}
+
 function tokenize(value: string): string[] {
-  return normalizeKeyword(value).split(/\s+/).filter(Boolean);
+  return normalizeKeyword(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(stem);
 }
 
 /**
@@ -96,8 +120,8 @@ function scoreCandidate(term: string, item: SymbolResult): number {
   // Every token of the concept must be present for a strong score.
   let score = hits / wanted.length;
 
-  // Exact name match is the best possible signal.
-  if (normalizeKeyword(item.name) === normalizeKeyword(term)) {
+  // Exact name match is the best possible signal, plurals folded.
+  if (got.join(' ') === wanted.join(' ')) {
     score = 1;
   } else if (score === 1 && got.length > wanted.length) {
     // All tokens present but the symbol is more specific than asked for
@@ -125,46 +149,6 @@ function scoreCandidate(term: string, item: SymbolResult): number {
   return Math.max(0, Math.min(1, score));
 }
 
-/** ARASAAC safety net so a concept never comes back empty. */
-async function arasaacFallback(term: string, limit: number): Promise<SymbolResult[]> {
-  try {
-    const q = encodeURIComponent(normalizeKeyword(term) || term);
-    const res = await fetch(
-      `https://api.arasaac.org/v1/pictograms/${LOCALE.slice(0, 2)}/search/${q}`,
-    );
-    if (!res.ok) return [];
-    const payload = (await res.json()) as unknown;
-    const items = Array.isArray(payload) ? payload : [];
-    return items.slice(0, limit).flatMap((item: Record<string, unknown>) => {
-      const id = (item?._id ?? item?.id) as string | number | undefined;
-      if (!id) return [];
-      const imageUrl = `https://static.arasaac.org/pictograms/${id}/${id}_300.png`;
-      return [
-        {
-          id,
-          name: String(item?.keyword ?? term),
-          locale: LOCALE,
-          repoKey: 'arasaac',
-          license: 'ARASAAC',
-          author: 'ARASAAC',
-          imageUrl,
-          detailsUrl: `https://arasaac.org/pictogram/${id}`,
-          sourceUrl: imageUrl,
-          searchString: term,
-          unsafeResult: false,
-          hc: false,
-          extension: 'png',
-          source: 'arasaac' as const,
-          tier: 4,
-          confidence: 0.55,
-        },
-      ];
-    });
-  } catch {
-    return [];
-  }
-}
-
 function dedupe(items: SymbolResult[]): SymbolResult[] {
   const seen = new Set<string>();
   return items.filter((i) => {
@@ -175,15 +159,23 @@ function dedupe(items: SymbolResult[]): SymbolResult[] {
   });
 }
 
-/** One round of library search for a single phrasing. */
+/**
+ * One round of library search for a single phrasing.
+ *
+ * ARASAAC is asked first and, when it answers well, is the only source used, so
+ * the board stays visually consistent. OpenSymbols is only brought in to rescue a
+ * word ARASAAC handles badly, such as "paint brush", where ARASAAC's closest
+ * match is a paint roller and Mulberry has an exact paint brush.
+ */
 async function searchOnce(term: string, limit: number): Promise<SymbolResult[]> {
-  const collected: SymbolResult[] = [];
+  const preferred = await searchArasaac(term, { locale: LOCALE, limit });
 
-  const emoji = getTwemojiMatch(term);
-  // Only trust an emoji when it matches the whole concept, which is what stopped
-  // filler words being promoted to the top of the board.
-  if (emoji && normalizeKeyword(emoji.name) === normalizeKeyword(term)) {
-    collected.push(emoji);
+  const bestPreferred = preferred.reduce(
+    (max, item) => Math.max(max, scoreCandidate(term, item)),
+    0,
+  );
+  if (bestPreferred >= CONFIDENCE_THRESHOLD) {
+    return dedupe(preferred);
   }
 
   const [favored, general] = await Promise.all([
@@ -196,14 +188,13 @@ async function searchOnce(term: string, limit: number): Promise<SymbolResult[]> 
     searchSymbolTerm({ term, locale: LOCALE, limit }).catch(() => null),
   ]);
 
-  if (favored) collected.push(...favored.results);
-  if (general) collected.push(...general.results);
+  const rescued: SymbolResult[] = [];
+  if (favored) rescued.push(...favored.results);
+  if (general) rescued.push(...general.results);
 
-  if (collected.length === 0) {
-    collected.push(...(await arasaacFallback(term, limit)));
-  }
-
-  return dedupe(collected);
+  // ARASAAC results stay in the pool, so if nothing better turns up the closest
+  // pictogram is still offered rather than nothing at all.
+  return dedupe([...preferred, ...rescued]);
 }
 
 /** Caregiver override for this word, if any. Always wins. */

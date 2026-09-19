@@ -2,12 +2,13 @@
   "name": "TalkAlotta",
   "short_name": "TalkAlotta",
   "description": "Adaptive AAC communication boards",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "landscape",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#1c1f24",
+  "theme_color": "#1c1f24",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -20,6 +21,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
