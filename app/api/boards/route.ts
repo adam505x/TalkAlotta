@@ -2,18 +2,41 @@ import { NextResponse } from 'next/server';
 import { desc, eq } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
 import { assembleMainBoard, touchBoard } from '@/lib/board';
+import {
+  LOCATION_BUCKETS,
+  TIME_BUCKETS,
+  recommendedScenarios,
+  type LocationBucket,
+  type TimeBucket,
+} from '@/lib/core-words';
 import { getLayout, getProfile, getVoice } from '@/lib/profile';
 import { recordFeedback } from '@/lib/symbol-search';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** The assembled main board: core strip, folders, saved situations. */
-export async function GET() {
+/**
+ * The assembled main board: core row, folders, saved situations.
+ *
+ * `timeBucket` and `location` let the demo controls override the context so the
+ * situational adaptation can be shown on demand rather than waited for.
+ */
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const bucket = url.searchParams.get('timeBucket');
+  const place = url.searchParams.get('location');
+
   const profile = getProfile();
-  const board = await assembleMainBoard();
+  const board = await assembleMainBoard({
+    timeBucket: TIME_BUCKETS.includes(bucket as TimeBucket) ? (bucket as TimeBucket) : null,
+    location: LOCATION_BUCKETS.includes(place as LocationBucket)
+      ? (place as LocationBucket)
+      : null,
+  });
+
   return NextResponse.json({
     ...board,
+    recommended: recommendedScenarios(board.timeBucket, board.location),
     layout: getLayout(profile),
     voice: getVoice(profile),
     onboarded: profile.onboarded,

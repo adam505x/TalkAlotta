@@ -10,16 +10,45 @@ import { speak, unlockAudio } from '@/lib/speech';
  * Setup, run once by the caregiver. Everything here stays changeable afterwards
  * from Settings.
  *
+ * ONE QUESTION PER PAGE. A caregiver who is not especially technical should never
+ * have to work out which of four fields on a screen still needs an answer.
+ *
  * Deliberately not called a quiz or a test in anything the caregiver reads.
  *
- * There is exactly ONE physical calibration, the tap targets. Vision is a plain
- * question, because it is the caregiver answering on the communicator's behalf
- * and a shrinking-symbol exercise would be measuring the wrong person.
+ * There is exactly ONE physical calibration, the tap targets. Eyesight is a plain
+ * question, because it is the caregiver answering on the communicator's behalf and
+ * a shrinking-symbol exercise would be measuring the wrong person.
  */
 
-type Step = 'intro' | 'profile' | 'vision' | 'tap' | 'routine' | 'size' | 'voice' | 'done';
+type Step =
+  | 'intro'
+  | 'age'
+  | 'gender'
+  | 'nationality'
+  | 'relationship'
+  | 'vision'
+  | 'tap'
+  | 'routine'
+  | 'size'
+  | 'voice'
+  | 'done';
 
-const STEP_ORDER: Step[] = ['intro', 'profile', 'vision', 'tap', 'routine', 'size', 'voice', 'done'];
+const STEPS: Step[] = [
+  'intro',
+  'age',
+  'gender',
+  'nationality',
+  'relationship',
+  'vision',
+  'tap',
+  'routine',
+  'size',
+  'voice',
+  'done',
+];
+
+/** Steps that count towards the progress the caregiver sees. */
+const QUESTION_STEPS: Step[] = STEPS.filter((s) => s !== 'intro' && s !== 'done');
 
 /** Five targets: each corner and the centre. */
 const TAP_TARGETS = [
@@ -39,7 +68,7 @@ const VISION_OPTIONS: { value: VisionCategory; label: string; hint: string }[] =
     label: 'Cortical visual impairment',
     hint: 'Fewer buttons, plain background, high contrast',
   },
-  { value: 'unknown', label: 'Not sure', hint: 'We will use standard sizes' },
+  { value: 'unknown', label: 'Not sure', hint: 'Standard sizes will be used' },
 ];
 
 export default function OnboardingPage() {
@@ -48,27 +77,21 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Profile
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
   const [nationality, setNationality] = useState('');
   const [relationship, setRelationship] = useState('');
-
-  // Vision and routine
   const [vision, setVision] = useState<VisionCategory>('none');
   const [routine, setRoutine] = useState('varies');
 
-  // Tap calibration
   const [tapIndex, setTapIndex] = useState(0);
   const [errors, setErrors] = useState<number[]>([]);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
 
-  // Layout, suggested then editable
   const [gridIndex, setGridIndex] = useState(2);
   const [gapPx, setGapPx] = useState(12);
   const [iconScale, setIconScale] = useState(1);
 
-  // Voice
   const [voice, setVoice] = useState<{ voiceId: string; label: string; rationale: string } | null>(
     null,
   );
@@ -84,7 +107,6 @@ export default function OnboardingPage() {
     () => (errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 0),
     [errors],
   );
-
   const suggestion = useMemo(() => suggestLayout(averageError, vision), [averageError, vision]);
 
   const goto = (next: Step) => {
@@ -92,36 +114,12 @@ export default function OnboardingPage() {
     setStep(next);
   };
 
-  const recordTap = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      const surface = surfaceRef.current;
-      if (!surface) return;
-      const rect = surface.getBoundingClientRect();
-      const target = TAP_TARGETS[tapIndex];
-      const targetX = rect.left + rect.width * target.x;
-      const targetY = rect.top + rect.height * target.y;
-      const dx = event.clientX - targetX;
-      const dy = event.clientY - targetY;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+  const stepBack = useCallback(() => {
+    const i = STEPS.indexOf(step);
+    if (i > 0) goto(STEPS[i - 1]);
+  }, [step]);
 
-      const nextErrors = [...errors, distance];
-      setErrors(nextErrors);
-
-      if (tapIndex + 1 >= TAP_TARGETS.length) {
-        const avg = nextErrors.reduce((a, b) => a + b, 0) / nextErrors.length;
-        const suggested = suggestLayout(avg, vision);
-        setGridIndex(suggested.gridIndex);
-        setGapPx(suggested.gapPx);
-        setIconScale(suggested.iconScale);
-        goto('routine');
-      } else {
-        setTapIndex(tapIndex + 1);
-      }
-    },
-    [errors, tapIndex, vision],
-  );
-
-  const saveAndContinue = useCallback(
+  const save = useCallback(
     async (payload: Record<string, unknown>, next: Step) => {
       setSaving(true);
       setError(null);
@@ -149,145 +147,270 @@ export default function OnboardingPage() {
     [],
   );
 
-  const stepNumber = STEP_ORDER.indexOf(step);
+  const recordTap = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const surface = surfaceRef.current;
+      if (!surface) return;
+      const rect = surface.getBoundingClientRect();
+      const target = TAP_TARGETS[tapIndex];
+      const dx = event.clientX - (rect.left + rect.width * target.x);
+      const dy = event.clientY - (rect.top + rect.height * target.y);
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      const nextErrors = [...errors, distance];
+      setErrors(nextErrors);
+
+      if (tapIndex + 1 >= TAP_TARGETS.length) {
+        const avg = nextErrors.reduce((a, b) => a + b, 0) / nextErrors.length;
+        const suggested = suggestLayout(avg, vision);
+        setGridIndex(suggested.gridIndex);
+        setGapPx(suggested.gapPx);
+        setIconScale(suggested.iconScale);
+        goto('routine');
+      } else {
+        setTapIndex(tapIndex + 1);
+      }
+    },
+    [errors, tapIndex, vision],
+  );
+
+  const questionNumber = QUESTION_STEPS.indexOf(step) + 1;
+
+  /** Shared frame so every question looks the same. */
+  const Frame = ({
+    title,
+    hint,
+    children,
+    footer,
+  }: {
+    title: string;
+    hint?: string;
+    children?: React.ReactNode;
+    footer: React.ReactNode;
+  }) => (
+    <section className="sheet flex flex-1 flex-col gap-5 p-6">
+      <div>
+        <h2 className="text-2xl font-bold">{title}</h2>
+        {hint ? (
+          <p className="mt-2 text-base" style={{ color: 'var(--ink-soft)' }}>
+            {hint}
+          </p>
+        ) : null}
+      </div>
+      {children}
+      <div className="mt-auto flex flex-wrap items-center gap-3">{footer}</div>
+    </section>
+  );
+
+  const backButton =
+    step !== 'intro' && step !== 'done' ? (
+      <button
+        type="button"
+        onClick={stepBack}
+        className="text-sm font-bold underline"
+        style={{ color: 'var(--ink-soft)' }}
+      >
+        Back
+      </button>
+    ) : null;
 
   return (
-    <main className="safe-top safe-bottom mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-6 p-5">
+    <main className="safe-top safe-bottom mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-4 p-4">
       <header className="shrink-0">
-        <p className="text-sm font-semibold" style={{ color: 'var(--ink-soft)' }}>
-          Setting up — step {Math.max(1, stepNumber)} of {STEP_ORDER.length - 2}
+        <p
+          className="text-[11px] font-bold uppercase tracking-[0.08em]"
+          style={{ color: 'var(--on-chrome-soft)' }}
+        >
+          TalkAlotta · setting up
         </p>
-        <h1 className="text-2xl font-bold">TalkAlotta</h1>
+        {questionNumber > 0 ? (
+          <div className="mt-2 flex items-center gap-2">
+            {QUESTION_STEPS.map((s, i) => (
+              <span
+                key={s}
+                aria-hidden="true"
+                className="h-1.5 flex-1 rounded-full"
+                style={{
+                  background: i < questionNumber ? 'var(--teal)' : 'rgba(255,255,255,.2)',
+                }}
+              />
+            ))}
+            <span className="ml-1 text-xs" style={{ color: 'var(--on-chrome-soft)' }}>
+              {questionNumber} of {QUESTION_STEPS.length}
+            </span>
+          </div>
+        ) : null}
       </header>
 
       {error ? (
         <p
-          className="rounded-xl border-2 p-3 text-base font-semibold"
-          style={{ borderColor: 'var(--role-feeling-line)', background: 'var(--role-feeling-bg)' }}
+          className="rounded-xl p-3 font-bold"
+          style={{ background: '#fdeae7', color: '#a62f1e' }}
         >
           {error}
         </p>
       ) : null}
 
       {step === 'intro' ? (
-        <section className="flex flex-1 flex-col justify-center gap-5">
-          <h2 className="text-3xl font-bold">Let us set the board up together</h2>
-          <p className="text-lg" style={{ color: 'var(--ink-soft)' }}>
-            A few short questions and one quick tapping exercise. It takes about two minutes, and
-            everything can be changed afterwards.
-          </p>
-          <div>
-            <Button size="xl" onClick={() => goto('profile')}>
+        <Frame
+          title="Let us set the board up together"
+          hint="A few short questions, one at a time, and one quick tapping exercise. About two minutes. Everything can be changed later."
+          footer={
+            <Button size="xl" onClick={() => goto('age')}>
               Start
             </Button>
-          </div>
-        </section>
+          }
+        />
       ) : null}
 
-      {step === 'profile' ? (
-        <section className="flex flex-1 flex-col gap-5">
-          <h2 className="text-2xl font-bold">About the communicator</h2>
-          <p style={{ color: 'var(--ink-soft)' }}>
-            All optional. These answers are what will choose an accent-matched voice.
-          </p>
+      {step === 'age' ? (
+        <Frame
+          title="How old is the communicator?"
+          hint="Optional. This helps choose a voice that suits them."
+          footer={
+            <>
+              <Button size="xl" disabled={saving} onClick={() => void save({ age: age ? Number(age) : null }, 'gender')}>
+                Continue
+              </Button>
+              {backButton}
+              <button
+                type="button"
+                className="text-sm font-bold underline"
+                style={{ color: 'var(--ink-soft)' }}
+                onClick={() => void save({ age: null }, 'gender')}
+              >
+                Skip
+              </button>
+            </>
+          }
+        >
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={120}
+            autoFocus
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            placeholder="8"
+            className="min-h-[64px] w-full rounded-xl border-2 px-4 text-2xl font-bold"
+            style={{ borderColor: '#cfcfc4', background: '#fff', color: 'var(--ink)' }}
+          />
+        </Frame>
+      ) : null}
 
-          <label className="flex flex-col gap-2">
-            <span className="font-semibold">Age</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={120}
-              value={age}
-              onChange={(e) => setAge(e.target.value)}
-              className="min-h-[56px] rounded-xl border-2 px-4 text-lg"
-              style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
-            />
-          </label>
-
-          <fieldset className="flex flex-col gap-2">
-            <legend className="font-semibold">Gender</legend>
-            <div className="flex flex-wrap gap-2">
-              {['female', 'male', 'other', 'prefer not to say'].map((option) => (
-                <Button
-                  key={option}
-                  size="lg"
-                  variant={gender === option ? 'primary' : 'secondary'}
-                  onClick={() => setGender(option)}
-                >
-                  {option}
-                </Button>
-              ))}
-            </div>
-          </fieldset>
-
-          <label className="flex flex-col gap-2">
-            <span className="font-semibold">Country or region</span>
-            <input
-              type="text"
-              value={nationality}
-              placeholder="Ireland"
-              onChange={(e) => setNationality(e.target.value)}
-              className="min-h-[56px] rounded-xl border-2 px-4 text-lg"
-              style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
-            />
-          </label>
-
-          <fieldset className="flex flex-col gap-2">
-            <legend className="font-semibold">You are their</legend>
-            <div className="flex flex-wrap gap-2">
-              {['parent', 'teacher', 'therapist', 'other'].map((option) => (
-                <Button
-                  key={option}
-                  size="lg"
-                  variant={relationship === option ? 'primary' : 'secondary'}
-                  onClick={() => setRelationship(option)}
-                >
-                  {option}
-                </Button>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="mt-auto flex gap-3">
-            <Button
-              size="xl"
-              disabled={saving}
-              onClick={() =>
-                void saveAndContinue(
-                  {
-                    age: age ? Number(age) : null,
-                    gender: gender || null,
-                    nationality: nationality || null,
-                    caregiverRelationship: relationship || null,
-                  },
-                  'vision',
-                )
-              }
-            >
-              Continue
-            </Button>
+      {step === 'gender' ? (
+        <Frame
+          title="Are they a boy or a girl?"
+          hint="Optional. Used to pick a matching voice later."
+          footer={
+            <>
+              <Button size="xl" disabled={saving} onClick={() => void save({ gender: gender || null }, 'nationality')}>
+                Continue
+              </Button>
+              {backButton}
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            {['girl', 'boy', 'other', 'prefer not to say'].map((option) => (
+              <Button
+                key={option}
+                size="xl"
+                variant={gender === option ? 'selected' : 'secondary'}
+                onClick={() => setGender(option)}
+              >
+                {option}
+              </Button>
+            ))}
           </div>
-        </section>
+        </Frame>
+      ) : null}
+
+      {step === 'nationality' ? (
+        <Frame
+          title="Where do they live?"
+          hint="Optional. This is what will choose an accent when more voices are added."
+          footer={
+            <>
+              <Button
+                size="xl"
+                disabled={saving}
+                onClick={() => void save({ nationality: nationality || null }, 'relationship')}
+              >
+                Continue
+              </Button>
+              {backButton}
+            </>
+          }
+        >
+          <input
+            type="text"
+            autoFocus
+            value={nationality}
+            placeholder="Ireland"
+            onChange={(e) => setNationality(e.target.value)}
+            className="min-h-[64px] w-full rounded-xl border-2 px-4 text-xl font-bold"
+            style={{ borderColor: '#cfcfc4', background: '#fff', color: 'var(--ink)' }}
+          />
+        </Frame>
+      ) : null}
+
+      {step === 'relationship' ? (
+        <Frame
+          title="Who are you to them?"
+          footer={
+            <>
+              <Button
+                size="xl"
+                disabled={saving}
+                onClick={() => void save({ caregiverRelationship: relationship || null }, 'vision')}
+              >
+                Continue
+              </Button>
+              {backButton}
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            {['parent', 'teacher', 'therapist', 'other'].map((option) => (
+              <Button
+                key={option}
+                size="xl"
+                variant={relationship === option ? 'selected' : 'secondary'}
+                onClick={() => setRelationship(option)}
+              >
+                {option}
+              </Button>
+            ))}
+          </div>
+        </Frame>
       ) : null}
 
       {step === 'vision' ? (
-        <section className="flex flex-1 flex-col gap-5">
-          <h2 className="text-2xl font-bold">How is their eyesight?</h2>
-          <p style={{ color: 'var(--ink-soft)' }}>
-            This changes how big the pictures are, and for low vision or CVI it also means fewer
-            buttons on a plain, high-contrast background.
-          </p>
-          <div className="flex flex-col gap-3">
+        <Frame
+          title="How is their eyesight?"
+          hint="This sets how big the pictures are. Low vision and CVI also get fewer buttons on a plain, high-contrast background."
+          footer={
+            <>
+              <Button size="xl" disabled={saving} onClick={() => void save({ vision }, 'tap')}>
+                Continue
+              </Button>
+              {backButton}
+            </>
+          }
+        >
+          <div className="flex flex-col gap-2.5">
             {VISION_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => setVision(option.value)}
-                className="flex min-h-[64px] flex-col items-start justify-center rounded-xl border-4 px-4 py-2 text-left"
+                className="flex min-h-[64px] flex-col items-start justify-center rounded-xl border-2 px-4 py-2 text-left"
                 style={{
-                  borderColor: vision === option.value ? 'var(--focus)' : 'var(--line)',
-                  background: 'var(--card)',
+                  borderColor: vision === option.value ? 'var(--teal)' : '#cfcfc4',
+                  background: vision === option.value ? '#eaf3f3' : '#fff',
+                  color: 'var(--ink)',
                 }}
               >
                 <span className="text-lg font-bold">{option.label}</span>
@@ -297,26 +420,23 @@ export default function OnboardingPage() {
               </button>
             ))}
           </div>
-          <div className="mt-auto">
-            <Button size="xl" disabled={saving} onClick={() => void saveAndContinue({ vision }, 'tap')}>
-              Continue
-            </Button>
-          </div>
-        </section>
+        </Frame>
       ) : null}
 
       {step === 'tap' ? (
-        <section className="flex flex-1 flex-col gap-4">
-          <h2 className="text-2xl font-bold">Tap the circle</h2>
-          <p style={{ color: 'var(--ink-soft)' }}>
-            Five circles, one after another. Let them tap naturally. How close the taps land sets the
-            button size and the spacing between buttons.
-          </p>
+        <section className="sheet flex flex-1 flex-col gap-4 p-6">
+          <div>
+            <h2 className="text-2xl font-bold">Tap the circle</h2>
+            <p className="mt-2 text-base" style={{ color: 'var(--ink-soft)' }}>
+              Five circles, one after another. Let them tap naturally. How close the taps land sets
+              both the button size and the space between buttons.
+            </p>
+          </div>
           <div
             ref={surfaceRef}
             onPointerDown={recordTap}
-            className="relative flex-1 rounded-2xl border-4"
-            style={{ borderColor: 'var(--line)', background: 'var(--card)', touchAction: 'none' }}
+            className="relative min-h-[240px] flex-1 rounded-2xl border-2"
+            style={{ borderColor: '#cfcfc4', background: '#fff', touchAction: 'none' }}
             role="button"
             tabIndex={0}
             aria-label={`Tap target ${tapIndex + 1} of ${TAP_TARGETS.length}`}
@@ -330,93 +450,106 @@ export default function OnboardingPage() {
                 transform: 'translate(-50%, -50%)',
                 width: 72,
                 height: 72,
-                background: 'var(--role-modifier-bg)',
-                border: '6px solid var(--role-modifier-line)',
+                background: '#eaf3f3',
+                border: '6px solid var(--teal)',
               }}
             />
-            <span className="absolute bottom-3 left-1/2 -translate-x-1/2 text-sm font-semibold">
+            <span
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 text-sm font-bold"
+              style={{ color: 'var(--ink-soft)' }}
+            >
               {tapIndex + 1} of {TAP_TARGETS.length}
             </span>
           </div>
-          <button
-            type="button"
-            className="self-start text-sm font-semibold underline"
-            onClick={() => {
-              setErrors([]);
-              setTapIndex(0);
-              goto('routine');
-            }}
-          >
-            Skip this for now
-          </button>
+          <div className="flex items-center gap-4">
+            {backButton}
+            <button
+              type="button"
+              className="text-sm font-bold underline"
+              style={{ color: 'var(--ink-soft)' }}
+              onClick={() => {
+                setErrors([]);
+                setTapIndex(0);
+                goto('routine');
+              }}
+            >
+              Skip the tapping
+            </button>
+          </div>
         </section>
       ) : null}
 
       {step === 'routine' ? (
-        <section className="flex flex-1 flex-col gap-5">
-          <h2 className="text-2xl font-bold">How structured is their day?</h2>
-          <p style={{ color: 'var(--ink-soft)' }}>
-            This is what lets the board put the right words up at the right time of day.
-          </p>
+        <Frame
+          title="How structured is their day?"
+          hint="This lets the board put the right words up at the right time of day."
+          footer={
+            <>
+              <Button
+                size="xl"
+                disabled={saving}
+                onClick={() =>
+                  void save(
+                    {
+                      routine,
+                      tapErrorPx: errors.length ? Math.round(averageError) : null,
+                      gridIndex: suggestion.gridIndex,
+                      gapPx: suggestion.gapPx,
+                      iconScale: suggestion.iconScale,
+                    },
+                    'size',
+                  )
+                }
+              >
+                Continue
+              </Button>
+              {backButton}
+            </>
+          }
+        >
           <div className="flex flex-col gap-3">
             {[
               { value: 'rigid', label: 'Much the same every day' },
               { value: 'loose', label: 'A rough pattern' },
               { value: 'varies', label: 'Different every day' },
             ].map((option) => (
-              <button
+              <Button
                 key={option.value}
-                type="button"
+                size="xl"
+                variant={routine === option.value ? 'selected' : 'secondary'}
                 onClick={() => setRoutine(option.value)}
-                className="min-h-[64px] rounded-xl border-4 px-4 text-left text-lg font-bold"
-                style={{
-                  borderColor: routine === option.value ? 'var(--focus)' : 'var(--line)',
-                  background: 'var(--card)',
-                }}
               >
                 {option.label}
-              </button>
+              </Button>
             ))}
           </div>
-          <div className="mt-auto">
-            <Button
-              size="xl"
-              disabled={saving}
-              onClick={() =>
-                void saveAndContinue(
-                  {
-                    routine,
-                    tapErrorPx: errors.length ? Math.round(averageError) : null,
-                    gridIndex: suggestion.gridIndex,
-                    gapPx: suggestion.gapPx,
-                    iconScale: suggestion.iconScale,
-                  },
-                  'size',
-                )
-              }
-            >
-              Continue
-            </Button>
-          </div>
-        </section>
+        </Frame>
       ) : null}
 
       {step === 'size' ? (
-        <section className="flex flex-1 flex-col gap-5">
-          <h2 className="text-2xl font-bold">Button size</h2>
-          <p style={{ color: 'var(--ink-soft)' }}>
-            {errors.length
+        <Frame
+          title="Does this button size look right?"
+          hint={
+            (errors.length
               ? `Suggested from the tapping: ${describePreset(gridIndex)}.`
-              : 'No tapping measured, so this is the standard size.'}
-            {suggestion.visionOverrodeTap
-              ? ' Made larger because of the eyesight answer.'
-              : ''}
-          </p>
-
+              : 'No tapping measured, so this is the standard size.') +
+            (suggestion.visionOverrodeTap ? ' Made larger because of the eyesight answer.' : '')
+          }
+          footer={
+            <>
+              <Button
+                size="xl"
+                disabled={saving}
+                onClick={() => void save({ gridIndex, gapPx, iconScale }, 'voice')}
+              >
+                Continue
+              </Button>
+              {backButton}
+            </>
+          }
+        >
           <label className="flex flex-col gap-2">
-            <span className="font-semibold">
-              Fewer, bigger buttons &nbsp;&harr;&nbsp; more, smaller buttons
-            </span>
+            <span className="font-bold">Fewer, bigger buttons or more, smaller buttons</span>
             <input
               type="range"
               min={0}
@@ -430,7 +563,7 @@ export default function OnboardingPage() {
           </label>
 
           <label className="flex flex-col gap-2">
-            <span className="font-semibold">Space between buttons</span>
+            <span className="font-bold">Space between buttons</span>
             <input
               type="range"
               min={8}
@@ -447,53 +580,62 @@ export default function OnboardingPage() {
 
           {/* A live preview at the chosen size, so the choice is visible not described. */}
           <div
-            className="grid rounded-xl border-2 p-2"
+            className="grid rounded-xl p-2"
             style={{
-              borderColor: 'var(--line)',
+              background: 'var(--board-bg)',
               gridTemplateColumns: `repeat(${GRID_PRESETS[gridIndex].cols}, minmax(0, 1fr))`,
               gap: `${gapPx}px`,
-              height: 200,
+              height: 190,
             }}
           >
-            {Array.from({ length: GRID_PRESETS[gridIndex].cols * GRID_PRESETS[gridIndex].rows }).map(
-              (_, i) => (
-                <span
-                  key={i}
-                  className="rounded-lg border-2"
-                  style={{ background: 'var(--role-object-bg)', borderColor: 'var(--role-object-line)' }}
-                />
-              ),
-            )}
+            {Array.from({
+              length: GRID_PRESETS[gridIndex].cols * GRID_PRESETS[gridIndex].rows,
+            }).map((_, i) => (
+              <span
+                key={i}
+                className="rounded-lg border-2"
+                style={{
+                  background: 'var(--role-object-bg)',
+                  borderColor: 'var(--role-object-line)',
+                }}
+              />
+            ))}
           </div>
-
-          <div className="mt-auto">
-            <Button
-              size="xl"
-              disabled={saving}
-              onClick={() => void saveAndContinue({ gridIndex, gapPx, iconScale }, 'voice')}
-            >
-              Continue
-            </Button>
-          </div>
-        </section>
+        </Frame>
       ) : null}
 
       {step === 'voice' ? (
-        <section className="flex flex-1 flex-col gap-5">
-          <h2 className="text-2xl font-bold">How should the voice sound?</h2>
-          <p style={{ color: 'var(--ink-soft)' }}>
-            Worked out from the answers you gave. Have a listen and confirm.
-          </p>
-
-          <div
-            className="rounded-xl border-4 p-4"
-            style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
-          >
+        <Frame
+          title="How should the voice sound?"
+          hint="Worked out from the answers you gave. Have a listen, then confirm."
+          footer={
+            <>
+              <Button
+                size="xl"
+                disabled={saving}
+                onClick={() =>
+                  void save(
+                    {
+                      voiceId: voice?.voiceId ?? null,
+                      voiceLabel: voice?.label ?? null,
+                      markOnboarded: true,
+                    },
+                    'done',
+                  )
+                }
+              >
+                Use this voice
+              </Button>
+              {backButton}
+            </>
+          }
+        >
+          <div className="rounded-xl border-2 p-4" style={{ borderColor: '#cfcfc4', background: '#fff' }}>
             <p className="text-xl font-bold">{voice?.label ?? 'Standard voice'}</p>
             <p className="mt-1 text-sm" style={{ color: 'var(--ink-soft)' }}>
               {voice?.rationale ?? 'One standard voice is available at the moment.'}
             </p>
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button
                 size="lg"
                 variant="secondary"
@@ -505,50 +647,30 @@ export default function OnboardingPage() {
                 Hear the voice
               </Button>
               {voiceTried ? (
-                <span className="self-center text-sm" style={{ color: 'var(--ink-soft)' }}>
-                  If nothing played, the browser voice will be used instead.
+                <span className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+                  If nothing played, the built-in browser voice will be used instead.
                 </span>
               ) : null}
             </div>
           </div>
-
-          <div className="mt-auto">
-            <Button
-              size="xl"
-              disabled={saving}
-              onClick={() =>
-                void saveAndContinue(
-                  {
-                    voiceId: voice?.voiceId ?? null,
-                    voiceLabel: voice?.label ?? null,
-                    markOnboarded: true,
-                  },
-                  'done',
-                )
-              }
-            >
-              Use this voice
-            </Button>
-          </div>
-        </section>
+        </Frame>
       ) : null}
 
       {step === 'done' ? (
-        <section className="flex flex-1 flex-col justify-center gap-5">
-          <h2 className="text-3xl font-bold">Ready</h2>
-          <p className="text-lg" style={{ color: 'var(--ink-soft)' }}>
-            The board is set to {describePreset(gridIndex)}. Every answer can be changed from
-            Settings at any time.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Button size="xl" onClick={() => router.push('/board')}>
-              Open the board
-            </Button>
-            <Button size="xl" variant="secondary" onClick={() => router.push('/describe')}>
-              Describe a situation first
-            </Button>
-          </div>
-        </section>
+        <Frame
+          title="Ready"
+          hint={`The board is set to ${describePreset(gridIndex)}. Every answer can be changed from Caregiver mode at any time.`}
+          footer={
+            <>
+              <Button size="xl" onClick={() => router.push('/board')}>
+                Open the board
+              </Button>
+              <Button size="xl" variant="secondary" onClick={() => router.push('/board?situation=1')}>
+                Describe a situation first
+              </Button>
+            </>
+          }
+        />
       ) : null}
     </main>
   );

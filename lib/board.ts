@@ -4,9 +4,11 @@ import {
   CORE_WORDS,
   FOLDER_LABELS,
   FOLDER_ORDER,
+  LOCATION_WORDS,
   STARTER_VOCABULARY,
   TIME_OF_DAY_WORDS,
   timeOfDay,
+  type LocationBucket,
   type TimeBucket,
   type WordRole,
 } from './core-words';
@@ -17,12 +19,12 @@ import { matchConcept } from './symbol-search';
  *
  * Board shape, and why:
  *
- *  - The five core words sit in their own fixed strip, OUTSIDE the adjustable
- *    grid. At the largest button size the grid holds twelve buttons, and five
- *    core words plus navigation would have eaten all of it, leaving no room for
- *    the words the situation is actually about. Keeping them out of the grid also
- *    means they never move when the grid size changes, which is the whole point
- *    of a fixed position: muscle memory.
+ *  - The core words sit in their own fixed top row, OUTSIDE the adjustable grid.
+ *    At the largest button size the grid holds twelve buttons, and the core words
+ *    plus navigation would have eaten all of it, leaving no room for the words the
+ *    situation is actually about. Keeping them out of the grid also means they
+ *    never move when the grid size changes, which is the whole point of a fixed
+ *    position: muscle memory. yes and no live at opposite ends of that row.
  *
  *  - The grid itself holds folders of fixed vocabulary, which never move either.
  *
@@ -132,27 +134,23 @@ async function resolveMany(words: { term: string; role: WordRole }[]): Promise<T
   return tiles.filter((t): t is Tile => t !== null);
 }
 
-/** A folder tile that opens a page. */
-function folderTile(folderId: string, label: string, imageUrl: string): Tile {
-  return { term: folderId, label, role: 'object', imageUrl, kind: 'folder', folderId };
-}
-
-/**
- * A folder cover picture. Uses the first word inside the folder, so the cover is
- * always something already on the board rather than another search.
- */
-function coverFor(tiles: Tile[]): string {
-  return tiles[0]?.imageUrl ?? '';
-}
-
 export interface AssembledBoard {
   core: Tile[];
   pages: BoardPage[];
   timeBucket: TimeBucket;
+  location: LocationBucket | null;
 }
 
-export async function assembleMainBoard(): Promise<AssembledBoard> {
-  const bucket = timeOfDay();
+export interface BoardContext {
+  /** Overrides the clock. Used by the demo controls to show time adaptation. */
+  timeBucket?: TimeBucket | null;
+  /** Where the communicator is. No override means no location folder. */
+  location?: LocationBucket | null;
+}
+
+export async function assembleMainBoard(context: BoardContext = {}): Promise<AssembledBoard> {
+  const bucket = context.timeBucket ?? timeOfDay();
+  const location = context.location ?? null;
 
   // Fixed vocabulary folders.
   const byFolder = new Map<string, { term: string; role: WordRole }[]>();
@@ -163,7 +161,6 @@ export async function assembleMainBoard(): Promise<AssembledBoard> {
   }
 
   const folderPages: BoardPage[] = [];
-  const folderTiles: Tile[] = [];
 
   for (const folderId of FOLDER_ORDER) {
     const words = byFolder.get(folderId);
@@ -175,9 +172,6 @@ export async function assembleMainBoard(): Promise<AssembledBoard> {
       title: FOLDER_LABELS[folderId] ?? folderId,
       tiles,
     });
-    folderTiles.push(
-      folderTile(folderId, FOLDER_LABELS[folderId] ?? folderId, coverFor(tiles)),
-    );
   }
 
   // The one part of the board that shifts on its own: time of day.
@@ -188,7 +182,18 @@ export async function assembleMainBoard(): Promise<AssembledBoard> {
   const nowTiles = await resolveMany(nowWords);
   if (nowTiles.length > 0) {
     folderPages.push({ id: 'folder:now', title: bucket, tiles: nowTiles });
-    folderTiles.push(folderTile('now', bucket, coverFor(nowTiles)));
+  }
+
+  // The other half of situational adaptation: where they are.
+  if (location) {
+    const placeWords = (LOCATION_WORDS[location] ?? []).map((term) => ({
+      term,
+      role: 'object' as WordRole,
+    }));
+    const placeTiles = await resolveMany(placeWords);
+    if (placeTiles.length > 0) {
+      folderPages.push({ id: 'folder:place', title: location, tiles: placeTiles });
+    }
   }
 
   // Saved situation boards, newest first, each as its own folder.
@@ -214,15 +219,6 @@ export async function assembleMainBoard(): Promise<AssembledBoard> {
       symbolId: i.symbolId,
     }));
     folderPages.push({ id: `board:${board.id}`, title: board.name, tiles });
-    folderTiles.push({
-      term: board.name,
-      label: board.name,
-      role: 'place',
-      imageUrl: coverFor(tiles),
-      kind: 'folder',
-      folderId: `board:${board.id}`,
-      boardId: board.id,
-    });
   }
 
   const core: Tile[] = CORE_WORDS.map((w) => ({
@@ -234,7 +230,7 @@ export async function assembleMainBoard(): Promise<AssembledBoard> {
     confidence: 100,
   }));
 
-  return { core, pages: folderPages, timeBucket: bucket };
+  return { core, pages: folderPages, timeBucket: bucket, location };
 }
 
 export function touchBoard(boardId: number) {

@@ -2,19 +2,24 @@
 
 import { useCallback, useRef } from 'react';
 import { cn } from '@/lib/cn';
-import type { WordRole } from '@/lib/core-words';
+import { NAV_ICONS, type TileVariant, type WordRole } from '@/lib/core-words';
 
 /**
  * One board button.
+ *
+ * EVERY tile is the same box. Same border, same padding, same picture area, same
+ * label. A folder differs only in its face colour and two absolutely positioned
+ * marks, so it can never come out a different size from a word beside it.
  *
  * Accessibility decisions baked in here:
  *
  *  - The word is ALWAYS shown under the picture. Picture-only is harder for an
  *    emerging reader, and the caregiver needs to know what a button will say.
  *
- *  - Colour follows the Fitzgerald key, the established AAC convention for word
- *    types. Colour is never the only signal: the label carries the meaning on its
- *    own, so this still works for a colour-blind user.
+ *  - Face colour follows the Fitzgerald key, the established AAC convention for
+ *    word types, over one shared subtle border. Colour is never the only signal:
+ *    the label carries the meaning on its own, so a colour-blind user loses
+ *    nothing.
  *
  *  - Every press is debounced. One intended tap that registers twice would say
  *    the word twice and add it to the sentence twice, which is a very visible
@@ -24,13 +29,27 @@ import type { WordRole } from '@/lib/core-words';
  *    thing with a keyboard or VoiceOver.
  */
 
-const ROLE_STYLES: Record<WordRole, { bg: string; line: string }> = {
-  core: { bg: 'var(--role-core-bg)', line: 'var(--role-core-line)' },
-  action: { bg: 'var(--role-action-bg)', line: 'var(--role-action-line)' },
-  object: { bg: 'var(--role-object-bg)', line: 'var(--role-object-line)' },
-  place: { bg: 'var(--role-place-bg)', line: 'var(--role-place-line)' },
-  feeling: { bg: 'var(--role-feeling-bg)', line: 'var(--role-feeling-line)' },
-  modifier: { bg: 'var(--role-modifier-bg)', line: 'var(--role-modifier-line)' },
+interface Face {
+  bg: string;
+  fg: string;
+}
+
+const ROLE_FACES: Record<WordRole, Face> = {
+  core: { bg: 'var(--role-core-bg)', fg: 'var(--role-core-fg)' },
+  action: { bg: 'var(--role-action-bg)', fg: 'var(--role-action-fg)' },
+  object: { bg: 'var(--role-object-bg)', fg: 'var(--role-object-fg)' },
+  place: { bg: 'var(--role-place-bg)', fg: 'var(--role-place-fg)' },
+  feeling: { bg: 'var(--role-feeling-bg)', fg: 'var(--role-feeling-fg)' },
+  modifier: { bg: 'var(--role-modifier-bg)', fg: 'var(--role-modifier-fg)' },
+  affirm: { bg: 'var(--role-affirm-bg)', fg: 'var(--role-affirm-fg)' },
+  negate: { bg: 'var(--role-negate-bg)', fg: 'var(--role-negate-fg)' },
+};
+
+const VARIANT_FACES: Partial<Record<TileVariant, Face>> = {
+  folder: { bg: 'var(--role-folder-bg)', fg: 'var(--role-folder-fg)' },
+  nav: { bg: 'var(--role-nav-bg)', fg: 'var(--role-nav-fg)' },
+  scenario: { bg: 'var(--role-scenario-bg)', fg: 'var(--role-scenario-fg)' },
+  caregiver: { bg: 'var(--role-nav-bg)', fg: 'var(--role-nav-fg)' },
 };
 
 export const DEBOUNCE_MS = 350;
@@ -38,12 +57,12 @@ export const DEBOUNCE_MS = 350;
 export interface TileProps {
   label: string;
   imageUrl: string;
-  role: WordRole;
-  kind?: 'word' | 'folder';
+  role?: WordRole;
+  variant?: TileVariant;
   iconScale?: number;
   onActivate: () => void;
-  /** Shown as a small corner mark, for the caregiver's review step only. */
-  badge?: string;
+  /** Shows a pencil mark, for when the board is in edit mode. */
+  editable?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -51,11 +70,11 @@ export interface TileProps {
 export function Tile({
   label,
   imageUrl,
-  role,
-  kind = 'word',
+  role = 'object',
+  variant = 'word',
   iconScale = 1,
   onActivate,
-  badge,
+  editable,
   disabled,
   className,
 }: TileProps) {
@@ -68,50 +87,56 @@ export function Tile({
     onActivate();
   }, [onActivate]);
 
-  const style = ROLE_STYLES[role] ?? ROLE_STYLES.object;
+  const face = VARIANT_FACES[variant] ?? ROLE_FACES[role] ?? ROLE_FACES.object;
+  const isFolder = variant === 'folder';
+
+  const describedAs =
+    variant === 'folder'
+      ? `${label}, folder`
+      : variant === 'scenario'
+        ? `${label}, opens the describe a situation box`
+        : label;
 
   return (
     <button
       type="button"
       onClick={handle}
       disabled={disabled}
-      aria-label={kind === 'folder' ? `${label}, folder` : label}
-      className={cn(
-        'relative flex h-full w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-[var(--tile-radius)] border-4 p-2 text-center',
-        'active:translate-y-px disabled:opacity-40',
-        className,
-      )}
-      style={{
-        background: style.bg,
-        borderColor: style.line,
-        // A folder gets a heavier border so it reads as "opens something"
-        // without relying on colour alone.
-        borderStyle: kind === 'folder' ? 'double' : 'solid',
-      }}
+      aria-label={editable ? `${describedAs}, change the picture` : describedAs}
+      className={cn('cell', className)}
+      style={{ background: face.bg, color: face.fg }}
     >
+      {isFolder ? (
+        <>
+          <span aria-hidden="true" className="cell__tab" />
+          <span
+            aria-hidden="true"
+            className="cell__folder-mark"
+            style={{
+              backgroundImage: `url("${NAV_ICONS.folder}")`,
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+            }}
+          />
+        </>
+      ) : null}
+
       {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt=""
-          draggable={false}
-          className="pointer-events-none min-h-0 flex-1 object-contain"
-          style={{ width: `${Math.round(72 * iconScale)}%` }}
-        />
+        <img src={imageUrl} alt="" draggable={false} className="cell__img" />
       ) : (
-        <span className="flex-1" />
+        <span aria-hidden="true" className="cell__placeholder" />
       )}
+
       <span
-        className="w-full shrink-0 truncate font-semibold leading-tight"
-        style={{ fontSize: `${Math.round(100 * iconScale)}%`, color: 'var(--ink)' }}
+        className="cell__label"
+        style={{ fontSize: `clamp(11px, ${1.35 * iconScale}vw, ${Math.round(17 * iconScale)}px)` }}
       >
         {label}
       </span>
-      {badge ? (
-        <span
-          className="absolute right-1 top-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold"
-          style={{ background: style.line, color: '#fff' }}
-        >
-          {badge}
+
+      {editable ? (
+        <span aria-hidden="true" className="cell__edit-mark">
+          &#9998;
         </span>
       ) : null}
     </button>

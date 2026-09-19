@@ -14,7 +14,25 @@
  * stored in symbol_overrides and wins over the built-in.
  */
 
-export type WordRole = 'core' | 'action' | 'object' | 'place' | 'feeling' | 'modifier';
+/**
+ * Word roles drive the Fitzgerald-style colour coding.
+ *
+ * `affirm` and `negate` exist only for yes and no. They are never produced by the
+ * concept extraction; they are hardcoded, because yes and no need a fixed colour
+ * and a fixed position more than any other pair on the board.
+ */
+export type WordRole =
+  | 'core'
+  | 'action'
+  | 'object'
+  | 'place'
+  | 'feeling'
+  | 'modifier'
+  | 'affirm'
+  | 'negate';
+
+/** Visual treatment, separate from the word's role. */
+export type TileVariant = 'word' | 'folder' | 'nav' | 'scenario' | 'caregiver';
 
 export interface CoreWord {
   term: string;
@@ -78,14 +96,94 @@ const FINISHED = svg(
   ].join(''),
 );
 
-/** Always present, always in this order, never searched. */
+// A thick tick on green. Hardcoded for the same reason as the rest: yes must
+// never be a picture that could be mistaken for anything else.
+const YES = svg(
+  [
+    '<rect x="8" y="8" width="84" height="84" rx="16" fill="#E8FAE9" stroke="#2C8A38" stroke-width="6"/>',
+    '<path d="M26 52l18 18 32-38" fill="none" stroke="#2C8A38" stroke-width="15"/>',
+  ].join(''),
+);
+
+// A thick cross on red.
+const NO = svg(
+  [
+    '<rect x="8" y="8" width="84" height="84" rx="16" fill="#FDEAE7" stroke="#B5342A" stroke-width="6"/>',
+    '<path d="M30 30l40 40M70 30L30 70" stroke="#B5342A" stroke-width="15"/>',
+  ].join(''),
+);
+
+/**
+ * The fixed top row, always present, always in this order, never searched.
+ *
+ * yes sits one in from the left and no sits one in from the right, with four
+ * buttons between them. Putting the two opposites at opposite ends makes hitting
+ * the wrong one much harder than if they were neighbours, which matters because
+ * yes and no are the two answers a communicator cannot afford to get wrong.
+ *
+ * Colours follow the convention in the reference project: affirm is green,
+ * negate is red.
+ */
 export const CORE_WORDS: CoreWord[] = [
   { term: 'help', label: 'help', role: 'core', imageUrl: HELP },
+  { term: 'yes', label: 'yes', role: 'affirm', imageUrl: YES },
   { term: 'more', label: 'more', role: 'core', imageUrl: MORE },
   { term: 'want', label: 'want', role: 'core', imageUrl: WANT },
   { term: 'stop', label: 'stop', role: 'core', imageUrl: STOP },
+  { term: 'no', label: 'no', role: 'negate', imageUrl: NO },
   { term: 'finished', label: 'finished', role: 'core', imageUrl: FINISHED },
 ];
+
+/**
+ * Navigation icons, also hardcoded.
+ *
+ * These must never come from a picture search. A search for "back" returns a
+ * picture of a person's back, which is exactly the wrong image for a button that
+ * means "return to the previous screen".
+ */
+export const NAV_ICONS = {
+  back: svg(
+    [
+      '<circle cx="50" cy="50" r="42" fill="#EFEFE8" stroke="#55606D" stroke-width="6"/>',
+      '<path d="M58 30L36 50l22 20" fill="none" stroke="#55606D" stroke-width="12"/>',
+    ].join(''),
+  ),
+  next: svg(
+    [
+      '<circle cx="50" cy="50" r="42" fill="#EFEFE8" stroke="#55606D" stroke-width="6"/>',
+      '<path d="M42 30l22 20-22 20" fill="none" stroke="#55606D" stroke-width="12"/>',
+    ].join(''),
+  ),
+  /** A speech bubble with a plus: describe a new situation. */
+  scenario: svg(
+    [
+      '<path d="M14 24a10 10 0 0 1 10-10h52a10 10 0 0 1 10 10v34a10 10 0 0 1-10 10H46L26 86V68h-2a10 10 0 0 1-10-10z" fill="#0E767C" stroke="#EAFBFB" stroke-width="5"/>',
+      '<path d="M50 28v26M37 41h26" stroke="#EAFBFB" stroke-width="10"/>',
+    ].join(''),
+  ),
+  /** A folder, used as the badge that marks a folder tile. */
+  folder: svg(
+    [
+      '<path d="M10 28a6 6 0 0 1 6-6h22l8 10h28a6 6 0 0 1 6 6v40a6 6 0 0 1-6 6H16a6 6 0 0 1-6-6z" fill="#D9D6C6" stroke="#6B6650" stroke-width="6"/>',
+      '<path d="M10 46h80" stroke="#6B6650" stroke-width="5"/>',
+    ].join(''),
+  ),
+  /** Three bars: the menu that opens caregiver mode. */
+  menu: svg(
+    [
+      '<rect x="10" y="22" width="80" height="12" rx="6" fill="#55606D"/>',
+      '<rect x="10" y="44" width="80" height="12" rx="6" fill="#55606D"/>',
+      '<rect x="10" y="66" width="80" height="12" rx="6" fill="#55606D"/>',
+    ].join(''),
+  ),
+  /** A person, for caregiver mode. */
+  caregiver: svg(
+    [
+      '<circle cx="50" cy="34" r="16" fill="#EFEFE8" stroke="#55606D" stroke-width="6"/>',
+      '<path d="M20 88c0-17 13-28 30-28s30 11 30 28" fill="#EFEFE8" stroke="#55606D" stroke-width="6"/>',
+    ].join(''),
+  ),
+} as const;
 
 export const CORE_TERMS = new Set(CORE_WORDS.map((w) => w.term));
 
@@ -169,6 +267,64 @@ export const TIME_OF_DAY_WORDS: Record<string, string[]> = {
 };
 
 export type TimeBucket = 'morning' | 'afternoon' | 'evening' | 'night';
+
+export const TIME_BUCKETS: TimeBucket[] = ['morning', 'afternoon', 'evening', 'night'];
+
+/**
+ * Where the communicator is. Location is the other half of "dynamic to the
+ * situation": the same board should offer different words in a shop and at home.
+ */
+export type LocationBucket = 'home' | 'school' | 'park' | 'shop' | 'restaurant';
+
+export const LOCATION_BUCKETS: LocationBucket[] = ['home', 'school', 'park', 'shop', 'restaurant'];
+
+export const LOCATION_WORDS: Record<LocationBucket, string[]> = {
+  home: ['sofa', 'kitchen', 'bedroom', 'garden'],
+  school: ['classroom', 'desk', 'playground', 'reading'],
+  park: ['swing', 'slide', 'ball', 'grass'],
+  shop: ['trolley', 'money', 'basket', 'queue'],
+  restaurant: ['menu', 'table', 'waiter', 'chips'],
+};
+
+/**
+ * Four suggested situations, offered on the describe sheet so a caregiver can
+ * start with one tap instead of typing. They change with the time of day, and
+ * with the location when one is set, which is the adaptation made visible.
+ */
+const TIME_SCENARIOS: Record<TimeBucket, string[]> = {
+  morning: [
+    'getting ready for school',
+    'breakfast at the table',
+    'brushing teeth',
+    'putting on my coat',
+  ],
+  afternoon: [
+    'lunch in the school canteen',
+    'playing outside at break',
+    'art class choosing colours',
+    'walking home',
+  ],
+  evening: ['dinner at the table', 'watching television', 'bath time', 'bedtime story'],
+  night: ['getting into bed', 'cannot sleep', 'needing the toilet', 'wanting a cuddle'],
+};
+
+const LOCATION_SCENARIOS: Record<LocationBucket, string[]> = {
+  home: ['playing in my room', 'helping in the kitchen'],
+  school: ['circle time in class', 'asking the teacher for help'],
+  park: ['on the swings with my friend', 'feeding the ducks'],
+  shop: ['choosing sweets at the shop', 'waiting in the queue'],
+  restaurant: ['choosing from the menu', 'waiting for my food'],
+};
+
+export function recommendedScenarios(
+  bucket: TimeBucket,
+  location?: LocationBucket | null,
+): string[] {
+  const byTime = TIME_SCENARIOS[bucket] ?? TIME_SCENARIOS.afternoon;
+  if (!location) return byTime.slice(0, 4);
+  const byPlace = LOCATION_SCENARIOS[location] ?? [];
+  return [...byPlace.slice(0, 2), ...byTime.slice(0, 2)].slice(0, 4);
+}
 
 /**
  * TODO(time-buckets): cutoffs picked as sensible defaults. Adjust if the

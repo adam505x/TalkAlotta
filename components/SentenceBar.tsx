@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
-import { cn } from '@/lib/cn';
 
 /**
  * The sentence builder across the top of the board.
@@ -25,6 +24,7 @@ export interface SentenceBarProps {
   onSpeakAll: () => void;
   onDeleteLast: () => void;
   onClear: () => void;
+  onOpenMenu: () => void;
   speaking?: boolean;
   iconScale?: number;
 }
@@ -34,6 +34,7 @@ export function SentenceBar({
   onSpeakAll,
   onDeleteLast,
   onClear,
+  onOpenMenu,
   speaking,
   iconScale = 1,
 }: SentenceBarProps) {
@@ -74,26 +75,38 @@ export function SentenceBar({
 
   return (
     <div
-      className="flex shrink-0 items-stretch gap-2 rounded-2xl border-4 p-2"
-      style={{ background: 'var(--card)', borderColor: 'var(--line)' }}
+      className="flex shrink-0 items-stretch gap-2 rounded-[10px] p-1.5"
+      style={{ background: 'var(--paper)' }}
     >
+      {/* Caregiver mode lives behind the hamburger, off to the side where a
+          communicator is unlikely to hit it by accident. */}
+      <button
+        type="button"
+        onClick={onOpenMenu}
+        aria-label="Open caregiver mode"
+        className="flex min-h-[60px] w-[52px] shrink-0 items-center justify-center rounded-lg"
+        style={{ background: 'var(--paper-dim)', color: '#55606d' }}
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path
+            d="M3 6h18M3 12h18M3 18h18"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
+
       {/* Speak-the-whole-sentence button, on the left as specified. */}
       <button
         type="button"
         onClick={onSpeakAll}
         disabled={empty || speaking}
         aria-label={empty ? 'Nothing to say yet' : `Say the whole sentence: ${sentence}`}
-        className={cn(
-          'flex min-h-[64px] min-w-[84px] shrink-0 flex-col items-center justify-center rounded-xl border-4 px-3 font-bold',
-          'disabled:opacity-40',
-        )}
-        style={{
-          background: 'var(--role-action-bg)',
-          borderColor: 'var(--role-action-line)',
-          color: 'var(--ink)',
-        }}
+        className="flex min-h-[60px] min-w-[86px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-3 font-bold disabled:opacity-40"
+        style={{ background: 'var(--teal)', color: 'var(--teal-ink)' }}
       >
-        <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
           <path
             d="M4 9v6h3l5 4V5L7 9H4z"
             fill="currentColor"
@@ -114,13 +127,13 @@ export function SentenceBar({
 
       {/* The sentence itself: pictures plus words, so it is readable either way. */}
       <div
-        className="flex min-h-[64px] flex-1 items-center gap-2 overflow-x-auto rounded-xl px-2"
-        style={{ background: 'var(--paper)' }}
+        className="flex min-h-[60px] flex-1 items-center gap-2 overflow-x-auto rounded-lg px-2"
+        style={{ background: '#ffffff' }}
         aria-live="polite"
         aria-label="Sentence so far"
       >
         {empty ? (
-          <span className="px-2 text-base" style={{ color: 'var(--ink-soft)' }}>
+          <span className="px-2 font-bold" style={{ color: '#9ca1a9' }}>
             Press pictures to build a sentence
           </span>
         ) : (
@@ -128,7 +141,7 @@ export function SentenceBar({
             <span
               key={`${word.term}-${index}`}
               className="flex shrink-0 flex-col items-center gap-0.5 rounded-lg border-2 px-2 py-1"
-              style={{ background: 'var(--card)', borderColor: 'var(--line)' }}
+              style={{ background: 'var(--paper)', borderColor: '#cfcfc4', color: 'var(--ink)' }}
             >
               {word.imageUrl ? (
                 <img
@@ -136,12 +149,12 @@ export function SentenceBar({
                   alt=""
                   draggable={false}
                   className="object-contain"
-                  style={{ height: `${Math.round(32 * iconScale)}px` }}
+                  style={{ height: `${Math.round(30 * iconScale)}px` }}
                 />
               ) : null}
               <span
-                className="font-semibold leading-none"
-                style={{ fontSize: `${Math.round(90 * iconScale)}%` }}
+                className="font-bold leading-none"
+                style={{ fontSize: `${Math.round(88 * iconScale)}%` }}
               >
                 {word.label}
               </span>
@@ -159,14 +172,10 @@ export function SentenceBar({
         onPointerCancel={cancelHold}
         disabled={empty}
         aria-label="Delete the last word. Hold to clear the whole sentence."
-        className="flex min-h-[64px] min-w-[72px] shrink-0 flex-col items-center justify-center rounded-xl border-4 px-3 font-bold disabled:opacity-40"
-        style={{
-          background: 'var(--role-feeling-bg)',
-          borderColor: 'var(--role-feeling-line)',
-          color: 'var(--ink)',
-        }}
+        className="flex min-h-[60px] min-w-[68px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border-2 px-3 font-bold disabled:opacity-40"
+        style={{ background: '#ffffff', borderColor: 'var(--danger)', color: 'var(--danger)' }}
       >
-        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
           <path
             d="M20 6H9L3 12l6 6h11a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1z"
             fill="none"
@@ -176,7 +185,7 @@ export function SentenceBar({
           />
           <path d="M12 10l5 4M17 10l-5 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
-        <span className="text-sm">delete</span>
+        <span className="text-xs">delete</span>
       </button>
     </div>
   );

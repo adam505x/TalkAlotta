@@ -2,66 +2,137 @@
 
 /* ---------------------------------------------------------------------------
    TalkAlotta design tokens.
-   Role colours follow the Fitzgerald key, the long-standing AAC convention for
+
+   Palette follows the reference project: near-black app chrome, a slightly
+   lighter grey board panel, off-white bars, teal as the single accent.
+
+   Tile colours follow the Fitzgerald key, the long-standing AAC convention for
    colour-coding word types. Colour is never the only signal: every tile also
    carries a visible text label.
 --------------------------------------------------------------------------- */
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  --ink: #14161a;
-  --ink-soft: #5b6472;
-  --paper: #f6f7f9;
+  --chrome: #1c1f24;
+  --board-bg: #3a3e45;
+  --paper: #f4f4f0;
+  --paper-dim: #e2e2da;
+  --ink: #15181c;
+  --ink-soft: #6c727b;
+  --teal: #0e767c;
+  --teal-ink: #eafbfb;
+  --danger: #d8483a;
+
+  /* Text used on top of the dark chrome. */
+  --on-chrome: #e8eaed;
+  --on-chrome-soft: #9ca1a9;
+
+  /* Fitzgerald-style role colours: tinted face, strong border, dark label. */
+  --role-core-bg: #ffe45c;
+  --role-core-fg: #1a1a1a;
+  --role-core-line: #c9a91f;
+
+  --role-action-bg: #8fdb6e;
+  --role-action-fg: #14210e;
+  --role-action-line: #4f9b35;
+
+  --role-object-bg: #ffe9a8;
+  --role-object-fg: #231a05;
+  --role-object-line: #c9a343;
+
+  --role-place-bg: #ffa94d;
+  --role-place-fg: #241203;
+  --role-place-line: #c26a12;
+
+  --role-feeling-bg: #f79bd3;
+  --role-feeling-fg: #2a0f20;
+  --role-feeling-line: #bf5a96;
+
+  --role-modifier-bg: #7cbeff;
+  --role-modifier-fg: #0d1a28;
+  --role-modifier-line: #3d80c4;
+
+  --role-affirm-bg: #4cc45c;
+  --role-affirm-fg: #0a1f0d;
+  --role-affirm-line: #237d2f;
+
+  --role-negate-bg: #ec5b45;
+  --role-negate-fg: #ffffff;
+  --role-negate-line: #a62f1e;
+
+  --role-folder-bg: #e4e1d4;
+  --role-folder-fg: #1a1a1a;
+  --role-folder-line: #8d8873;
+
+  --role-nav-bg: #c9c9be;
+  --role-nav-fg: #1a1a1a;
+  --role-nav-line: #7e7e72;
+
+  --role-scenario-bg: #0e767c;
+  --role-scenario-fg: #eafbfb;
+  --role-scenario-line: #7fd4d8;
+
+  --tile-radius: 10px;
+  --gap: 8px;
+
+  /* Used by the caregiver-facing screens, which sit on a light ground. */
   --card: #ffffff;
-  --line: #d9dee6;
-  --focus: #1d4ed8;
-
-  /* Fitzgerald-style role colours: tint background, strong border. */
-  --role-core-bg: #fff8d6;
-  --role-core-line: #e0b400;
-  --role-action-bg: #e2f7e4;
-  --role-action-line: #2f9e44;
-  --role-object-bg: #ffeeda;
-  --role-object-line: #e8590c;
-  --role-place-bg: #f1e6ff;
-  --role-place-line: #7048e8;
-  --role-feeling-bg: #ffe6ef;
-  --role-feeling-line: #d6336c;
-  --role-modifier-bg: #e0efff;
-  --role-modifier-line: #1c7ed6;
-
-  --tile-radius: 16px;
-  --tile-gap: 12px;
-  --icon-scale: 1;
+  --line: #cfcfc4;
 }
 
 /* Cortical visual impairment and low vision: strip visual noise rather than
-   only scaling up. Plain ground, no shadows, no tints, maximum contrast. */
+   only scaling up. Plain ground, no tints, maximum contrast. */
 :root[data-vision="cvi"],
 :root[data-vision="low_vision"] {
+  --chrome: #000000;
+  --board-bg: #000000;
   --paper: #000000;
-  --card: #000000;
+  --paper-dim: #000000;
   --ink: #ffffff;
   --ink-soft: #d0d4da;
-  --line: #ffffff;
+  --on-chrome: #ffffff;
+  --on-chrome-soft: #d0d4da;
+
   --role-core-bg: #000;
+  --role-core-fg: #fff;
   --role-action-bg: #000;
+  --role-action-fg: #fff;
   --role-object-bg: #000;
+  --role-object-fg: #fff;
   --role-place-bg: #000;
+  --role-place-fg: #fff;
   --role-feeling-bg: #000;
+  --role-feeling-fg: #fff;
   --role-modifier-bg: #000;
-  color-scheme: dark;
+  --role-modifier-fg: #fff;
+  --role-folder-bg: #000;
+  --role-folder-fg: #fff;
+  --role-nav-bg: #000;
+  --role-nav-fg: #fff;
+  --role-scenario-bg: #000;
+  --role-scenario-fg: #fff;
+  /* yes and no keep their colour even here: they are the two buttons where
+     colour carries real meaning and must stay distinguishable. */
+  --role-affirm-bg: #003d12;
+  --role-affirm-fg: #7cff96;
+  --role-negate-bg: #4a0a03;
+  --role-negate-fg: #ff9c8c;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--paper);
-  color: var(--ink);
+  height: 100%;
+  background: var(--chrome);
+  color: var(--on-chrome);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* Stop iOS inflating text in landscape. */
   -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
 
@@ -81,11 +152,10 @@ button {
 
 /* Visible focus for caregivers using a keyboard. */
 :focus-visible {
-  outline: 3px solid var(--focus);
+  outline: 3px solid #ffffff;
   outline-offset: 2px;
 }
 
-/* Respect a reduced-motion preference; there is no decorative motion anyway. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -100,4 +170,304 @@ button {
 }
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* The grey panel the tiles sit on. */
+.board-panel {
+  background: var(--board-bg);
+  border-radius: var(--tile-radius);
+}
+
+/* A light card on the dark chrome, for setup and caregiver screens. */
+.sheet {
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 14px;
+}
+
+/* ---------------------------------------------------------------- cells ----
+   One tile. Every tile is the same box, whatever it holds: same border, same
+   padding, same picture area, same label. Only the face colour and a couple of
+   absolutely positioned marks change, so a folder can never end up a different
+   size from a word.
+
+   The border is one subtle dark line rather than a saturated colour per word
+   type, which is what keeps a board of mixed colours calm to look at.
+-------------------------------------------------------------------------- */
+.cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  min-width: 0;
+  min-height: 0;
+  border: 3px solid rgba(12, 14, 18, 0.18);
+  border-radius: var(--tile-radius);
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.06s ease;
+}
+.cell:active {
+  transform: scale(0.96);
+}
+.cell:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cell__img {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.cell__placeholder {
+  flex: 1;
+  min-height: 0;
+  width: 55%;
+  border: 2px solid currentColor;
+  border-radius: 8px;
+  opacity: 0.28;
+}
+.cell__label {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+}
+
+/* A folder is marked, never resized: a tab on the top edge and a small glyph,
+   both absolutely positioned so the box stays identical to a word tile. */
+.cell__tab {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 7px;
+  width: 44%;
+  border-bottom-right-radius: 7px;
+  background: rgba(12, 14, 18, 0.3);
+}
+.cell__folder-mark {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 15px;
+  height: 15px;
+  opacity: 0.55;
+}
+.cell__edit-mark {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- sheets --- */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(12, 14, 18, 0.55);
+}
+.sheet-card {
+  display: flex;
+  width: min(560px, 100%);
+  max-height: 86dvh;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 22px;
+}
+.sheet-card--wide {
+  width: min(860px, 100%);
+}
+.sheet__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.sheet__label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6c727b;
+}
+.sheet__field {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 17px;
+  border-radius: 10px;
+  border: 2px solid #cfcfc4;
+  background: #fff;
+  color: var(--ink);
+}
+.sheet__field:focus {
+  outline: none;
+  border-color: var(--teal);
+}
+.sheet__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  border: 1px solid #afd4d6;
+  border-radius: 999px;
+  background: #eaf3f3;
+  color: var(--teal);
+  padding: 10px 15px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+}
+.chip:hover {
+  background: #dcedee;
+}
+.chip--on {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: var(--teal-ink);
+}
+.sheet__cancel {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: #6c727b;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 0;
+  min-height: 44px;
+}
+
+/* ---------------------------------------------------------------- drawer ---
+   Caregiver mode slides in from the left and deliberately does NOT cover the
+   whole screen: the board stays visible beside it, so edits can be made while
+   looking at the thing being edited.
+-------------------------------------------------------------------------- */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(12, 14, 18, 0.4);
+}
+.drawer-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 31;
+  display: flex;
+  width: min(330px, 84vw);
+  height: 100dvh;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 16px;
+  padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+}
+.drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 2px solid #cfcfc4;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.drawer-item:hover {
+  border-color: var(--teal);
+}
+.drawer-item[aria-pressed='true'] {
+  border-color: var(--teal);
+  background: #eaf3f3;
+}
+
+/* ------------------------------------------------------- demo controls ---- */
+.demo-fab {
+  position: fixed;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(28, 31, 36, 0.92);
+  color: var(--on-chrome);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.demo-panel {
+  position: fixed;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  z-index: 26;
+  width: min(320px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+/*
+ * A whole screen on a light ground. The board is dark, but the screens a
+ * caregiver reads and types on are documents, and dark grey body text on a dark
+ * panel would be unreadable.
+ */
+.page-light {
+  background: var(--paper);
+  color: var(--ink);
+  min-height: 100dvh;
+}
+.page-light a {
+  color: var(--teal);
+}
+
+:root[data-vision="cvi"] .page-light,
+:root[data-vision="low_vision"] .page-light {
+  background: #000;
+  color: #fff;
 }
