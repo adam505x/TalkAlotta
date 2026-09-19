@@ -8,7 +8,6 @@ import { Sheet } from '@/components/Sheet';
 import { ScenarioSheet } from '@/components/ScenarioSheet';
 import { PictureSheet, type Candidate } from '@/components/PictureSheet';
 import { CaregiverDrawer, type CaregiverAction } from '@/components/CaregiverDrawer';
-import { DemoControls } from '@/components/DemoControls';
 import { speak, stopSpeaking, unlockAudio } from '@/lib/speech';
 import {
   NAV_ICONS,
@@ -30,10 +29,11 @@ interface ApiPage {
   id: string;
   title: string;
   tiles: ApiTile[];
+  role: WordRole;
 }
 
 interface BoardPayload {
-  core: ApiTile[];
+  coreRows: ApiTile[][];
   pages: ApiPage[];
   timeBucket: TimeBucket;
   location: LocationBucket | null;
@@ -52,6 +52,7 @@ interface FolderEntry {
   id: string;
   title: string;
   cover: string;
+  role: WordRole;
   boardId?: number;
 }
 
@@ -67,6 +68,8 @@ type Overlay =
   | { kind: 'scenario' }
   | { kind: 'dashboard' }
   | { kind: 'saved' }
+  | { kind: 'addWord'; folderId: string; folderTitle: string }
+  | { kind: 'folderEdit'; folderId: string; folderTitle: string }
   | { kind: 'picture'; term: string; role: WordRole; onPicked?: (c: Candidate) => void };
 
 export default function BoardPage() {
@@ -84,6 +87,9 @@ export default function BoardPage() {
   const [editMode, setEditMode] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>({ kind: 'none' });
   const [stats, setStats] = useState<Stats | null>(null);
+  const [newWord, setNewWord] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Demo overrides. null means "use the real clock, no location".
   const [timeOverride, setTimeOverride] = useState<TimeBucket | null>(null);
@@ -148,6 +154,7 @@ export default function BoardPage() {
       id: page.id,
       title: page.title,
       cover: page.tiles[0]?.imageUrl ?? '',
+      role: page.role ?? 'object',
       boardId: page.id.startsWith('board:') ? Number(page.id.split(':')[1]) : undefined,
     }));
   }, [data]);
@@ -197,10 +204,6 @@ export default function BoardPage() {
           setEditMode((v) => !v);
           setDrawerOpen(false);
           break;
-        case 'edit-icons':
-          setEditMode(true);
-          setDrawerOpen(false);
-          break;
         case 'add-image':
           setEditMode(true);
           setDrawerOpen(false);
@@ -225,6 +228,55 @@ export default function BoardPage() {
       }
     },
     [],
+  );
+
+  const addWord = useCallback(
+    async (folderId: string, term: string) => {
+      const clean = term.trim();
+      if (!clean) return;
+      setBusy(true);
+      setActionError(null);
+      try {
+        const res = await fetch('/api/folders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderId, term: clean }),
+        });
+        const body = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(body.error ?? 'Could not add that word.');
+        setNewWord('');
+        setOverlay({ kind: 'none' });
+        await load();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : 'Could not add that word.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [load],
+  );
+
+  const removeFolder = useCallback(
+    async (folderId: string) => {
+      setBusy(true);
+      setActionError(null);
+      try {
+        const res = await fetch(`/api/folders?folderId=${encodeURIComponent(folderId)}`, {
+          method: 'DELETE',
+        });
+        const body = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(body.error ?? 'Could not remove that folder.');
+        setOpenFolder(null);
+        setPageIndex(0);
+        setOverlay({ kind: 'none' });
+        await load();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : 'Could not remove that folder.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [load],
   );
 
   const deleteBoard = useCallback(
@@ -264,7 +316,9 @@ export default function BoardPage() {
 
   // Two pinned tiles at most: go back inside a folder, new situation on the home
   // board, plus a next-page tile when the content overflows.
-  const pinned = 1;
+  // Pinned tiles in the grid: go back or new situation, plus the add button that
+  // every open folder carries.
+  const pinned = currentPage ? 2 : 1;
   const content: (ApiTile | FolderEntry)[] = currentPage ? currentPage.tiles : folders;
   const withoutNext = Math.max(1, capacity - pinned);
   const needsNext = content.length > withoutNext;
@@ -274,6 +328,18 @@ export default function BoardPage() {
   const slice = content.slice(safePage * perPage, safePage * perPage + perPage);
 
   const savedBoards = folders.filter((f) => f.boardId != null);
+
+  /**
+   * The core block is always exactly seven columns, whatever the grid below is
+   * set to. Its tiles are kept the same size as the grid's by giving the block
+   * the width of seven of the grid's tracks and centring it, rather than
+   * stretching seven words across more columns and leaving holes in the middle.
+   */
+  const CORE_COLS = 7;
+  const coreWidth =
+    layout.grid.cols === CORE_COLS
+      ? '100%'
+      : `calc((100% - ${(layout.grid.cols - 1) * layout.gapPx}px) * ${CORE_COLS} / ${layout.grid.cols} + ${(CORE_COLS - 1) * layout.gapPx}px)`;
 
   return (
     <main className="safe-top safe-bottom flex h-dvh flex-col gap-2 p-2">
@@ -308,39 +374,46 @@ export default function BoardPage() {
       ) : null}
 
       {/*
-        The fixed top row. Outside the adjustable grid, so it never moves when the
-        grid size changes. yes sits one in from the left, no one in from the right,
-        with four buttons between them, so the two opposites are hard to confuse.
-      */}
-      <div
-        className="grid shrink-0"
-        style={{
-          gridTemplateColumns: `repeat(${data.core.length}, minmax(0, 1fr))`,
-          gap: `${layout.gapPx}px`,
-          height: '17vh',
-          minHeight: '84px',
-        }}
-      >
-        {data.core.map((tile) => (
-          <Tile
-            key={tile.term}
-            label={tile.label}
-            imageUrl={tile.imageUrl}
-            role={tile.role}
-            iconScale={layout.iconScale}
-            editable={editMode}
-            onActivate={() => onWordTile(tile)}
-          />
-        ))}
-      </div>
+        The fixed top row. It uses the SAME column count as the grid below, so a
+        core tile and a grid tile are exactly the same size; a tile's height comes
+        from its aspect ratio, not from the space it is given.
 
-      {/* The adjustable grid, on its own panel. */}
-      <div className="board-panel min-h-0 flex-1 p-2">
+        When the grid is wider than seven columns the spare tracks are left empty
+        in the MIDDLE, so help stays first, finished stays last, and yes and no
+        stay one in from each edge whatever the button size.
+      */}
+      <div className="board-panel flex min-h-0 flex-1 flex-col gap-2 p-2">
         <div
-          className="grid h-full"
+          className="tile-grid mx-auto w-full shrink-0"
+          style={{
+            gridTemplateColumns: `repeat(${CORE_COLS}, minmax(0, 1fr))`,
+            gap: `${layout.gapPx}px`,
+            width: coreWidth,
+          }}
+        >
+          {data.coreRows.flatMap((row, rowIndex) =>
+            row.map((tile) => (
+              <Tile
+                key={`${rowIndex}-${tile.term}`}
+                label={tile.label}
+                imageUrl={tile.imageUrl}
+                role={tile.role}
+                iconScale={layout.iconScale}
+                editable={editMode}
+                onActivate={() => onWordTile(tile)}
+              />
+            )),
+          )}
+        </div>
+
+        <span aria-hidden="true" className="board-rule shrink-0" />
+
+        {/* The adjustable grid. Rows are not forced to a height: every tile keeps
+            its aspect ratio and the rows follow from that. */}
+        <div
+          className="tile-grid"
           style={{
             gridTemplateColumns: `repeat(${layout.grid.cols}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${layout.grid.rows}, minmax(0, 1fr))`,
             gap: `${layout.gapPx}px`,
           }}
         >
@@ -383,8 +456,19 @@ export default function BoardPage() {
                   label={folder.title}
                   imageUrl={folder.cover}
                   variant="folder"
+                  role={folder.role}
                   iconScale={layout.iconScale}
+                  editable={editMode}
                   onActivate={() => {
+                    // In edit mode a folder offers to be removed rather than opened.
+                    if (editMode) {
+                      setOverlay({
+                        kind: 'folderEdit',
+                        folderId: folder.id,
+                        folderTitle: folder.title,
+                      });
+                      return;
+                    }
                     setOpenFolder(folder.id);
                     setPageIndex(0);
                     if (folder.boardId != null) {
@@ -397,6 +481,23 @@ export default function BoardPage() {
                   }}
                 />
               ))}
+
+          {/* Every folder carries a way to add another picture to it. */}
+          {currentPage ? (
+            <Tile
+              label="add icon"
+              imageUrl={NAV_ICONS.add}
+              variant="nav"
+              iconScale={layout.iconScale}
+              onActivate={() =>
+                setOverlay({
+                  kind: 'addWord',
+                  folderId: currentPage.id,
+                  folderTitle: currentPage.title,
+                })
+              }
+            />
+          ) : null}
 
           {needsNext ? (
             <Tile
@@ -424,18 +525,6 @@ export default function BoardPage() {
         />
       ) : null}
 
-      <DemoControls
-        timeBucket={timeOverride}
-        location={locationOverride}
-        actualBucket={timeOfDay()}
-        onChange={({ timeBucket, location }) => {
-          setTimeOverride(timeBucket);
-          setLocationOverride(location);
-          setOpenFolder(null);
-          setPageIndex(0);
-        }}
-      />
-
       {overlay.kind === 'scenario' ? (
         <ScenarioSheet
           recommended={data.recommended}
@@ -447,6 +536,17 @@ export default function BoardPage() {
           onEditPicture={(term, role, onPicked) =>
             setOverlay({ kind: 'picture', term, role, onPicked })
           }
+          demo={{
+            timeBucket: timeOverride,
+            location: locationOverride,
+            actualBucket: timeOfDay(),
+            onChange: ({ timeBucket, location }) => {
+              setTimeOverride(timeBucket);
+              setLocationOverride(location);
+              setOpenFolder(null);
+              setPageIndex(0);
+            },
+          }}
         />
       ) : null}
 
@@ -463,6 +563,90 @@ export default function BoardPage() {
             if (!overlay.onPicked) void load();
           }}
         />
+      ) : null}
+
+      {overlay.kind === 'addWord' ? (
+        <Sheet
+          title={`Add a picture to ${overlay.folderTitle}`}
+          onClose={() => setOverlay({ kind: 'none' })}
+        >
+          <p className="text-sm font-semibold" style={{ color: '#6c727b' }}>
+            Type the word. A picture is found for it and added to this folder.
+          </p>
+          <form
+            className="flex flex-wrap gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void addWord(overlay.folderId, newWord);
+            }}
+          >
+            <input
+              className="sheet__field flex-1"
+              value={newWord}
+              onChange={(event) => setNewWord(event.target.value)}
+              placeholder="dog"
+              maxLength={40}
+              autoFocus
+              aria-label="Word to add"
+            />
+            <button
+              type="submit"
+              className="min-h-[52px] rounded-[10px] px-5 font-bold disabled:opacity-50"
+              style={{ background: 'var(--teal)', color: 'var(--teal-ink)' }}
+              disabled={busy || !newWord.trim()}
+            >
+              {busy ? 'Adding...' : 'Add'}
+            </button>
+          </form>
+          {actionError ? (
+            <p
+              className="rounded-[10px] p-3 text-sm font-bold"
+              style={{ background: '#fdeae7', color: '#a62f1e' }}
+            >
+              {actionError}
+            </p>
+          ) : null}
+        </Sheet>
+      ) : null}
+
+      {overlay.kind === 'folderEdit' ? (
+        <Sheet title={overlay.folderTitle} onClose={() => setOverlay({ kind: 'none' })}>
+          <p className="text-sm font-semibold" style={{ color: '#6c727b' }}>
+            {overlay.folderId.startsWith('board:')
+              ? 'This folder came from a situation you described. Removing it deletes it.'
+              : 'This is a built-in folder. Removing it takes it off the board; it is not deleted.'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="chip"
+              onClick={() => {
+                setOpenFolder(overlay.folderId);
+                setPageIndex(0);
+                setOverlay({ kind: 'none' });
+              }}
+            >
+              Open it instead
+            </button>
+            <button
+              type="button"
+              className="min-h-[44px] rounded-full border px-4 font-bold disabled:opacity-50"
+              style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+              disabled={busy}
+              onClick={() => void removeFolder(overlay.folderId)}
+            >
+              {busy ? 'Removing...' : 'Remove from the board'}
+            </button>
+          </div>
+          {actionError ? (
+            <p
+              className="rounded-[10px] p-3 text-sm font-bold"
+              style={{ background: '#fdeae7', color: '#a62f1e' }}
+            >
+              {actionError}
+            </p>
+          ) : null}
+        </Sheet>
       ) : null}
 
       {overlay.kind === 'saved' ? (

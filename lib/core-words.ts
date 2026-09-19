@@ -1,16 +1,13 @@
 /**
- * The five AAC core words are NEVER searched against the symbol library.
+ * The core block, the navigation icons, and the starter vocabulary.
  *
- * Reason: a library search for "finished" returns a finish-line symbol, and a
- * search for "help" returns whatever ranks first that day. These five are the
- * buttons a communicator needs most, and the ones where a wrong picture does
- * real harm, so they ship as hand-drawn inline SVG. They always render, they
- * never change under us, and they work with no network.
+ * The buttons that matter most ship as hand-drawn inline SVG rather than coming
+ * from the symbol library: a search for "finished" returns a finish line, and a
+ * search for "help" returns whatever ranks first that day. Being built in also
+ * means the safety-critical ones can never resolve to a low-confidence match.
+ * They render with no network and never change under us.
  *
- * The same reasoning covers the safety-critical vocabulary (help, stop): by
- * being hardcoded they can never resolve to a low-confidence match.
- *
- * A caregiver can still replace any of these from Edit board; the override is
+ * A caregiver can still replace any of them from edit mode; the override is
  * stored in symbol_overrides and wins over the built-in.
  */
 
@@ -33,13 +30,6 @@ export type WordRole =
 
 /** Visual treatment, separate from the word's role. */
 export type TileVariant = 'word' | 'folder' | 'nav' | 'scenario' | 'caregiver';
-
-export interface CoreWord {
-  term: string;
-  label: string;
-  role: WordRole;
-  imageUrl: string;
-}
 
 function svg(body: string): string {
   const doc =
@@ -114,32 +104,72 @@ const NO = svg(
 );
 
 /**
- * The fixed top row, always present, always in this order, never searched.
+ * The fixed core block: three rows of seven, always present, never rearranged.
  *
- * yes sits one in from the left and no sits one in from the right, with four
- * buttons between them. Putting the two opposites at opposite ends makes hitting
- * the wrong one much harder than if they were neighbours, which matters because
- * yes and no are the two answers a communicator cannot afford to get wrong.
+ * Laid out the way core boards conventionally are, and the way the reference
+ * screenshot is: pronouns and question words on the left, verbs through the
+ * middle, describing words down the right edge. Clustering like-coloured words
+ * together is what makes a board scannable rather than a patchwork.
  *
- * Colours follow the convention in the reference project: affirm is green,
- * negate is red.
+ * It is a mixture on purpose, not just verbs: pronouns, question words, verbs,
+ * describing words, and yes and no.
+ *
+ * yes and no sit on the TOP row, one in from the left and one in from the right
+ * with four buttons between them. They are the two answers a communicator cannot
+ * afford to get wrong, so they are kept as far apart as the row allows.
+ *
+ * A word with a built-in picture never goes near the symbol library: a search for
+ * "finished" returns a finish line, and these are the buttons that matter most.
+ * The rest resolve from the library once and are then cached, and a caregiver can
+ * replace any of them from edit mode.
  */
-export const CORE_WORDS: CoreWord[] = [
-  { term: 'help', label: 'help', role: 'core', imageUrl: HELP },
-  { term: 'yes', label: 'yes', role: 'affirm', imageUrl: YES },
-  { term: 'more', label: 'more', role: 'core', imageUrl: MORE },
-  { term: 'want', label: 'want', role: 'core', imageUrl: WANT },
-  { term: 'stop', label: 'stop', role: 'core', imageUrl: STOP },
-  { term: 'no', label: 'no', role: 'negate', imageUrl: NO },
-  { term: 'finished', label: 'finished', role: 'core', imageUrl: FINISHED },
+export interface CoreEntry {
+  term: string;
+  label: string;
+  role: WordRole;
+  /** Present only for the hand-drawn ones. Anything else resolves from the library. */
+  imageUrl?: string;
+}
+
+export const CORE_ROWS: CoreEntry[][] = [
+  [
+    { term: 'I', label: 'I', role: 'core' },
+    { term: 'yes', label: 'yes', role: 'affirm', imageUrl: YES },
+    { term: 'you', label: 'you', role: 'core' },
+    { term: 'want', label: 'want', role: 'action', imageUrl: WANT },
+    { term: 'go', label: 'go', role: 'action' },
+    { term: 'no', label: 'no', role: 'negate', imageUrl: NO },
+    { term: 'more', label: 'more', role: 'modifier', imageUrl: MORE },
+  ],
+  [
+    { term: 'she', label: 'she', role: 'core' },
+    { term: 'it', label: 'it', role: 'core' },
+    { term: 'that', label: 'that', role: 'core' },
+    { term: 'help', label: 'help', role: 'action', imageUrl: HELP },
+    { term: 'stop', label: 'stop', role: 'action', imageUrl: STOP },
+    { term: 'like', label: 'like', role: 'action' },
+    { term: 'finished', label: 'finished', role: 'modifier', imageUrl: FINISHED },
+  ],
+  [
+    { term: 'what', label: 'what', role: 'place' },
+    { term: 'where', label: 'where', role: 'place' },
+    { term: 'who', label: 'who', role: 'place' },
+    { term: 'do', label: 'do', role: 'action' },
+    { term: 'put', label: 'put', role: 'action' },
+    { term: 'give', label: 'give', role: 'action' },
+    { term: 'good', label: 'good', role: 'modifier' },
+  ],
 ];
 
+/** Flat list, for anything that just needs to know what is on the core block. */
+export const CORE_WORDS: CoreEntry[] = CORE_ROWS.flat();
+
 /**
- * Navigation icons, also hardcoded.
+ * Navigation and action icons, also hardcoded.
  *
  * These must never come from a picture search. A search for "back" returns a
- * picture of a person's back, which is exactly the wrong image for a button that
- * means "return to the previous screen".
+ * picture of a person's back, which is the wrong image for a button meaning
+ * "return to the previous screen".
  */
 export const NAV_ICONS = {
   back: svg(
@@ -161,7 +191,14 @@ export const NAV_ICONS = {
       '<path d="M50 28v26M37 41h26" stroke="#EAFBFB" stroke-width="10"/>',
     ].join(''),
   ),
-  /** A folder, used as the badge that marks a folder tile. */
+  /** A plus in a dashed square: add another picture to this folder. */
+  add: svg(
+    [
+      '<rect x="10" y="10" width="80" height="80" rx="12" fill="#EFEFE8" stroke="#55606D" stroke-width="6" stroke-dasharray="14 10"/>',
+      '<path d="M50 28v44M28 50h44" stroke="#55606D" stroke-width="12"/>',
+    ].join(''),
+  ),
+  /** A folder, kept for anywhere a folder needs naming in the caregiver screens. */
   folder: svg(
     [
       '<path d="M10 28a6 6 0 0 1 6-6h22l8 10h28a6 6 0 0 1 6 6v40a6 6 0 0 1-6 6H16a6 6 0 0 1-6-6z" fill="#D9D6C6" stroke="#6B6650" stroke-width="6"/>',
@@ -185,7 +222,7 @@ export const NAV_ICONS = {
   ),
 } as const;
 
-export const CORE_TERMS = new Set(CORE_WORDS.map((w) => w.term));
+export const CORE_TERMS = new Set(CORE_WORDS.map((w) => w.term.toLowerCase()));
 
 /**
  * Starter vocabulary for the fixed part of the board.

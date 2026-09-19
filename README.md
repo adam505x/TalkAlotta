@@ -27,19 +27,48 @@ Without warming, the first board open takes a few seconds while each fixed word 
 looked up for the first time. After that it is instant, because the results are
 cached in the database.
 
-### Running it on an iPad
+### Running it on an iPad, without the browser bars
 
 ```bash
 npm run dev:lan  # binds to 0.0.0.0 so other devices on the wifi can reach it
 ```
 
-Find the laptop's address (the `Network:` line the dev server prints), open it in
-Safari on the iPad, then Share, then Add to Home Screen. It opens without the
-browser bars, so it behaves like an app.
+Open the address the dev server prints under `Network:` in Safari on the iPad,
+then Share, then Add to Home Screen. Launching from that icon gives a plain
+full-screen app: no address bar, no toolbar at the bottom.
 
-One trap: the home screen icon remembers the exact address, and the laptop's
-address changes when it joins a different wifi network. Re-add the icon once you
-are on the network you will actually demo on.
+What makes that work, since adding a random website usually keeps the bars:
+
+- **The web app manifest is what decides it.** On iOS 17 and later, a site added
+  to the Home Screen opens as a Home Screen web app when its manifest sets
+  `display` to `standalone` or `fullscreen`. Ours is at
+  `public/manifest.webmanifest` and is linked from the page head.
+- **The manifest needs real icons.** An empty `icons` array is the usual reason a
+  site that looks correctly configured still opens with the bars, and it also
+  makes iOS fall back to a screenshot for the Home Screen icon. `npm run icons`
+  generates the three PNGs the manifest points at.
+- **`apple-touch-icon` is separate** from the manifest icons and is what iOS
+  actually puts on the Home Screen.
+- **The old meta tag is still worth having.** `apple-mobile-web-app-capable` is
+  what iOS before 17 used, and it is no longer the recommended mechanism, but it
+  costs nothing and covers an older iPad. Next emits the modern
+  `mobile-web-app-capable` by itself and does not emit the Apple one, so it is set
+  explicitly in `app/layout.tsx`.
+- **iOS 26 and later** open every site added to the Home Screen as a web app
+  regardless, so on a current iPad this is belt and braces.
+
+Two practical traps:
+
+- The Home Screen icon remembers the exact address, and the laptop's address
+  changes when it joins a different wifi network. Re-add the icon once you are on
+  the network you will demo on.
+- If you added the icon before these changes, delete it and add it again. iOS
+  reads the manifest at the moment you add it and does not revisit that decision.
+
+Sources: [WebKit features in Safari 16.4](https://webkit.org/blog/14445/webkit-features-in-safari-16-4/),
+[What's new in web apps, WWDC23](https://developer.apple.com/videos/play/wwdc2023/10120/),
+[iOS PWA compatibility](https://firt.dev/notes/pwa-ios/),
+[Web app manifest](https://web.dev/learn/pwa/web-app-manifest).
 
 ### Other commands
 
@@ -49,6 +78,7 @@ npm run reset -- --pictures --audio   # also clear the picture and speech caches
 npm run build          # production build
 npm start              # run the production build
 npm run typecheck      # TypeScript, no emit
+npm run icons          # regenerate the Home Screen icons
 ```
 
 `npm run reset` keeps the picture cache on purpose, so you can rehearse the setup
@@ -105,11 +135,24 @@ every word tried. OpenSymbols is kept as a rescue for the few words ARASAAC
 handles badly: "paint brush" is the clearest case, where ARASAAC's closest match
 is a paint roller and Mulberry has an exact paint brush.
 
-**The core words are never searched.** `help`, `yes`, `more`, `want`, `stop`, `no`
-and `finished` are hand-drawn SVG in `lib/core-words.ts`. A library search for
-"finished" returns a finish-line picture, and these are the buttons that matter
-most. Being built in also means the safety-critical ones can never resolve to a
-low-confidence match. A caregiver can still replace any of them.
+**The core block is three fixed rows of seven.** Laid out the way core boards
+conventionally are: pronouns and question words on the left, verbs through the
+middle, describing words down the right edge. Clustering like-coloured words
+together is what makes a board scannable rather than a patchwork. It is a mixture
+on purpose, not just verbs.
+
+```
+I      yes    you    want   go     no     more
+she    it     that   help   stop   like   finished
+what   where  who    do     put    give   good
+```
+
+**The buttons that matter most are never searched.** `help`, `yes`, `more`,
+`want`, `stop`, `no` and `finished` are hand-drawn SVG in `lib/core-words.ts`. A
+library search for "finished" returns a finish-line picture, and being built in
+means the safety-critical ones can never resolve to a low-confidence match. The
+other fourteen resolve from the library once and are cached like any fixed word.
+A caregiver can replace any of them from edit mode.
 
 **yes and no sit at opposite ends of the top row.** yes is one in from the left,
 no is one in from the right, with four buttons between them, so hitting the wrong
@@ -122,12 +165,27 @@ picture of a person's back, which is the wrong image for a button meaning "retur
 to the previous screen". Every navigation icon is hand-drawn alongside the core
 words.
 
-**Every tile is the same box.** Same border, same padding, same picture area, same
-label. A folder differs only in its face colour and two absolutely positioned
-marks, a tab on the top edge and a small folder glyph, so it can never come out a
-different size from the word tile beside it. The border is one subtle dark line
-shared by every tile rather than a saturated colour per word type, which is what
-keeps a board of mixed colours calm to look at.
+**Every tile is the same shape and the same size.** Each one is a slightly
+elongated square, fixed by `aspect-ratio` rather than stretched to fill whatever
+slice of the grid it lands in. That stretching was why the same button came out
+square on one board and a wide rectangle on another. The fixed top row uses the
+same column count as the grid below it, so a core word and a folder are identical
+in size. The border is one subtle dark line shared by every tile rather than a
+saturated colour per word type, which keeps a board of mixed colours calm.
+
+**The column count is the only size control.** Because height follows from the
+aspect ratio, picking a column count sets the size of every button on the board.
+The ladder runs from seven columns up to ten. Seven is the floor: the core block
+is seven wide, and both grids have to share a column width for their tiles to
+match. When the grid is wider than seven, the spare slots in each core row are
+left empty in the middle, so the describing column stays against the right edge
+and yes and no keep their places. The folder rows underneath are kept few enough
+that the whole board fits a landscape tablet without scrolling.
+
+**A folder is not a different-looking object.** It takes its colour from what is
+inside it, exactly like a word does: the doing folder is verb green, the feelings
+folder is pink. The only thing marking it as a folder is a small tab on its top
+edge, absolutely positioned so it costs no space.
 
 **The core words sit outside the adjustable grid.** At the largest button size the
 grid holds twelve buttons; the core row plus navigation would have used all of it.
@@ -145,9 +203,16 @@ turning on edit mode and then changing a picture should happen while looking at
 the board being changed. Dashboard, Saved boards, Edit boards, Edit icons and Add
 image all work from it; Settings opens its own screen.
 
-**Edit mode changes what a tap does.** With it on, tapping any button opens the
-picture chooser for that word instead of speaking it. A chosen picture is pinned to
-the word everywhere, not just on the board it was changed from.
+**Edit mode changes what a tap does.** With it on, tapping a word opens the picture
+chooser for it instead of speaking, and tapping a folder offers to remove it. A
+chosen picture is pinned to the word everywhere, not just on the board it was
+changed from. A built-in folder is hidden rather than deleted, so it can be
+brought back; a saved situation folder is deleted outright, because the caregiver
+made it in the first place.
+
+**Every folder carries an add button.** Open a folder and the last tile is "add
+icon": type a word, a picture is found for it, and it joins that folder. A word
+with no usable picture is refused rather than added blank.
 
 **A described situation becomes a folder.** The board stays predictable and the
 moment-specific words live one tap inside a folder named after that moment.
@@ -165,6 +230,12 @@ button dozens of times a day. The audio stream is fully buffered into bytes befo
 it is stored, so a repeat press gets complete audio instead of an already-consumed
 stream. The model is part of the cache key, so switching models does not serve back
 audio made by the old one.
+
+**A described situation fills a board, not an echo.** The extraction is asked for
+the words someone would actually need in that moment, not only the words the
+sentence contains. "Art class, choosing between paint and pencils" returns paint,
+pencils, brush, paper, draw, colour, apron, wash hands, excited and messy, rather
+than the two things that were named.
 
 **A failed AI call does not fall back silently.** The plain keyword filter turns
 "I need my red paint brush" into a search for "need my red paint brush" and can put
@@ -189,14 +260,17 @@ retry.
 
 ## Demo controls
 
-Bottom right, there is a control for the time of day and the location. It exists
-only for demonstrating: in real use the time comes from the clock and the location
-would come from the device, and nobody waits until bedtime to show that the board
-changes at bedtime.
+Inside the situation popup, under the four suggestions, there is a time-of-day
+slider and a row of places. It is there and nowhere else, because its only job is
+to show that the suggestions change with the context: move the slider and the four
+suggestions above it change in front of you.
 
-Changing either one reassembles the board. The bottom folder swaps to that time of
-day, a folder for the location appears, and the four suggested situations change to
-match. "Back to the real time, no location" clears both.
+It is not on the board. A communicator has no reason to pretend it is a different
+time of day, and in real use the time comes from the clock and the place would come
+from the device.
+
+Changing either one also reassembles the board behind the popup, so the bottom
+folder swaps to that time of day and a folder for the place appears.
 
 ## Switching model for the demo
 

@@ -578,14 +578,16 @@ export default function OnboardingPage() {
             </span>
           </label>
 
-          {/* A live preview at the chosen size, so the choice is visible not described. */}
+          {/* A live preview at the chosen size, so the choice is visible not
+              described. Same aspect ratio as a real tile, so what is shown here is
+              the shape that ends up on the board. */}
           <div
-            className="grid rounded-xl p-2"
+            className="tile-grid overflow-y-auto rounded-xl p-2"
             style={{
               background: 'var(--board-bg)',
               gridTemplateColumns: `repeat(${GRID_PRESETS[gridIndex].cols}, minmax(0, 1fr))`,
               gap: `${gapPx}px`,
-              height: 190,
+              maxHeight: 220,
             }}
           >
             {Array.from({
@@ -595,6 +597,7 @@ export default function OnboardingPage() {
                 key={i}
                 className="rounded-lg border-2"
                 style={{
+                  aspectRatio: '1 / 0.92',
                   background: 'var(--role-object-bg)',
                   borderColor: 'var(--role-object-line)',
                 }}

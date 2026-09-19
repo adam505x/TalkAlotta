@@ -71,7 +71,7 @@ export async function POST(request: Request) {
   });
 
   // The fixed-vocabulary cache for this word is now stale.
-  db.delete(schema.wordSymbols).where(eq(schema.wordSymbols.term, term)).run();
+  db.delete(schema.wordSymbols).where(eq(schema.wordSymbols.term, term)).run(); // term is already lowercased
 
   return NextResponse.json({ ok: true, term, imageUrl });
 }
@@ -83,6 +83,6 @@ export async function DELETE(request: Request) {
   if (!term) return NextResponse.json({ error: 'term required.' }, { status: 400 });
 
   db.delete(schema.symbolOverrides).where(eq(schema.symbolOverrides.term, term)).run();
-  db.delete(schema.wordSymbols).where(eq(schema.wordSymbols.term, term)).run();
+  db.delete(schema.wordSymbols).where(eq(schema.wordSymbols.term, term)).run(); // term is already lowercased
   return NextResponse.json({ ok: true });
 }

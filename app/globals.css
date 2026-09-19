@@ -172,10 +172,27 @@ button {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* The grey panel the tiles sit on. */
+/* The grey panel the tiles sit on. Tiles keep their shape rather than stretching
+   to fill it, so the panel scrolls in the rare case they do not all fit. */
 .board-panel {
   background: var(--board-bg);
   border-radius: var(--tile-radius);
+  overflow-y: auto;
+}
+
+/* Every grid on the board shares one track width, so a tile in the fixed core
+   block is exactly the same size as a tile in the grid below it. */
+.tile-grid {
+  display: grid;
+  align-content: start;
+}
+
+/* The line between the fixed core block and the folders below it. */
+.board-rule {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 /* A light card on the dark chrome, for setup and caregiver screens. */
@@ -187,14 +204,20 @@ button {
 
 /* ---------------------------------------------------------------- cells ----
    One tile. Every tile is the same box, whatever it holds: same border, same
-   padding, same picture area, same label. Only the face colour and a couple of
-   absolutely positioned marks change, so a folder can never end up a different
-   size from a word.
+   padding, same picture area, same label. Only the face colour and one
+   absolutely positioned tab change, so a folder can never end up a different
+   size or shape from a word.
+
+   aspect-ratio is what guarantees the shape. Without it a tile stretches to fill
+   whatever slice of the grid it lands in, so the same button came out square on
+   one board and a wide rectangle on another. Fixing the ratio means the column
+   count alone decides the size, and every tile on the screen gets the same one.
 
    The border is one subtle dark line rather than a saturated colour per word
    type, which is what keeps a board of mixed colours calm to look at.
 -------------------------------------------------------------------------- */
 .cell {
+  aspect-ratio: 1 / 0.92;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -245,24 +268,17 @@ button {
   text-align: center;
 }
 
-/* A folder is marked, never resized: a tab on the top edge and a small glyph,
-   both absolutely positioned so the box stays identical to a word tile. */
+/* The only thing that marks a folder: a tab on its top edge, drawn in the same
+   subtle tone as the tile border. Absolutely positioned, so a folder is exactly
+   the same size as every other tile. */
 .cell__tab {
   position: absolute;
   top: 0;
   left: 0;
-  height: 7px;
-  width: 44%;
-  border-bottom-right-radius: 7px;
-  background: rgba(12, 14, 18, 0.3);
-}
-.cell__folder-mark {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 15px;
-  height: 15px;
-  opacity: 0.55;
+  height: 6px;
+  width: 42%;
+  border-bottom-right-radius: 6px;
+  background: rgba(12, 14, 18, 0.28);
 }
 .cell__edit-mark {
   position: absolute;
@@ -417,39 +433,16 @@ button {
   background: #eaf3f3;
 }
 
-/* ------------------------------------------------------- demo controls ---- */
-.demo-fab {
-  position: fixed;
-  right: calc(12px + env(safe-area-inset-right, 0px));
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  z-index: 25;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
-  background: rgba(28, 31, 36, 0.92);
-  color: var(--on-chrome);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.demo-panel {
-  position: fixed;
-  right: calc(12px + env(safe-area-inset-right, 0px));
-  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
-  z-index: 26;
-  width: min(320px, 92vw);
+/* --------------------------------------------------- demo controls (inline) -
+   Lives inside the situation popup, because its only job is to show that the
+   suggested situations change with the time of day and the place.
+-------------------------------------------------------------------------- */
+.demo-inline {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  border-radius: 12px;
-  background: var(--paper);
-  color: var(--ink);
-  padding: 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  gap: 10px;
+  border-top: 2px dashed #cfcfc4;
+  padding-top: 12px;
 }
 
 /*

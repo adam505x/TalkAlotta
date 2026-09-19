@@ -24,13 +24,17 @@ try {
   }
   const board = await res.json();
 
-  const tiles = board.pages.flatMap((p) => p.tiles);
+  const coreTiles = (board.coreRows ?? []).flat();
+  const tiles = board.pages.flatMap((p) => p.tiles).concat(coreTiles);
   const missing = tiles.filter((t) => !t.imageUrl).map((t) => t.term);
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
 
   console.log('done');
   console.log(`  ${board.pages.length} folders, ${tiles.length} pictures, ${elapsed}s`);
-  console.log(`  core words: ${board.core.map((c) => c.label).join(', ')} (built in, never searched)`);
+  console.log(`  core block: ${board.coreRows.length} rows of ${board.coreRows[0]?.length ?? 0}`);
+  for (const row of board.coreRows) {
+    console.log(`    ${row.map((c) => c.label).join(' · ')}`);
+  }
   if (missing.length) {
     console.log(`  no picture found for: ${missing.join(', ')}`);
   }

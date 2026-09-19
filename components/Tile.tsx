@@ -2,14 +2,17 @@
 
 import { useCallback, useRef } from 'react';
 import { cn } from '@/lib/cn';
-import { NAV_ICONS, type TileVariant, type WordRole } from '@/lib/core-words';
+import type { TileVariant, WordRole } from '@/lib/core-words';
 
 /**
  * One board button.
  *
- * EVERY tile is the same box. Same border, same padding, same picture area, same
- * label. A folder differs only in its face colour and two absolutely positioned
- * marks, so it can never come out a different size from a word beside it.
+ * EVERY tile is the same box and the same size. Same border, same padding, same
+ * picture area, same label, same colours.
+ *
+ * A folder is not a different-looking object. It takes its colour from what is
+ * inside it, exactly like a word, and the ONLY thing marking it as a folder is a
+ * small tab on its top edge. Nothing about a folder changes its size.
  *
  * Accessibility decisions baked in here:
  *
@@ -45,8 +48,11 @@ const ROLE_FACES: Record<WordRole, Face> = {
   negate: { bg: 'var(--role-negate-bg)', fg: 'var(--role-negate-fg)' },
 };
 
+/**
+ * Only navigation and the new-situation button get a face of their own. A folder
+ * is deliberately absent here so it falls through to its role colour.
+ */
 const VARIANT_FACES: Partial<Record<TileVariant, Face>> = {
-  folder: { bg: 'var(--role-folder-bg)', fg: 'var(--role-folder-fg)' },
   nav: { bg: 'var(--role-nav-bg)', fg: 'var(--role-nav-fg)' },
   scenario: { bg: 'var(--role-scenario-bg)', fg: 'var(--role-scenario-fg)' },
   caregiver: { bg: 'var(--role-nav-bg)', fg: 'var(--role-nav-fg)' },
@@ -106,20 +112,7 @@ export function Tile({
       className={cn('cell', className)}
       style={{ background: face.bg, color: face.fg }}
     >
-      {isFolder ? (
-        <>
-          <span aria-hidden="true" className="cell__tab" />
-          <span
-            aria-hidden="true"
-            className="cell__folder-mark"
-            style={{
-              backgroundImage: `url("${NAV_ICONS.folder}")`,
-              backgroundSize: 'contain',
-              backgroundRepeat: 'no-repeat',
-            }}
-          />
-        </>
-      ) : null}
+      {isFolder ? <span aria-hidden="true" className="cell__tab" /> : null}
 
       {imageUrl ? (
         <img src={imageUrl} alt="" draggable={false} className="cell__img" />

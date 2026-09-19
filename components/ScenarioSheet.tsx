@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import type { WordRole } from '@/lib/core-words';
+import { DemoControls } from '@/components/DemoControls';
+import type { LocationBucket, TimeBucket, WordRole } from '@/lib/core-words';
 
 /**
  * Describe a situation, check what came back, save it as a folder.
@@ -48,11 +49,22 @@ export function ScenarioSheet({
   onClose,
   onSaved,
   onEditPicture,
+  demo,
 }: {
   recommended: string[];
   onClose: () => void;
   onSaved: () => void;
   onEditPicture: (term: string, role: WordRole, onPicked: (c: Candidate) => void) => void;
+  /** The time and place overrides, which only exist to demonstrate adaptation. */
+  demo: {
+    timeBucket: TimeBucket | null;
+    location: LocationBucket | null;
+    actualBucket: TimeBucket;
+    onChange: (next: {
+      timeBucket: TimeBucket | null;
+      location: LocationBucket | null;
+    }) => void;
+  };
 }) {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -189,6 +201,14 @@ export function ScenarioSheet({
                 </button>
               ))}
             </div>
+
+            {/* Moving these changes the four suggestions above. */}
+            <DemoControls
+              timeBucket={demo.timeBucket}
+              location={demo.location}
+              actualBucket={demo.actualBucket}
+              onChange={demo.onChange}
+            />
           </>
         ) : null}
 

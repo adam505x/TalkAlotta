@@ -16,7 +16,6 @@ export type CaregiverAction =
   | 'settings'
   | 'edit-boards'
   | 'saved-boards'
-  | 'edit-icons'
   | 'add-image';
 
 const stroke = {
@@ -59,13 +58,6 @@ const ICONS: Record<CaregiverAction, React.ReactNode> = {
       <path d="M3 11h18" {...stroke} />
     </svg>
   ),
-  'edit-icons': (
-    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="14" rx="2" {...stroke} />
-      <circle cx="8.5" cy="9" r="1.8" {...stroke} />
-      <path d="M4.5 16.5l4.5-4.5 3.5 3.5 2.5-2.5 4.5 4.5" {...stroke} />
-    </svg>
-  ),
   'add-image': (
     <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
       <path d="M12 16V4M7.5 8.5L12 4l4.5 4.5" {...stroke} />
@@ -76,9 +68,12 @@ const ICONS: Record<CaregiverAction, React.ReactNode> = {
 
 const ITEMS: { id: CaregiverAction; label: string; blurb: string }[] = [
   { id: 'dashboard', label: 'Dashboard', blurb: 'Most said sentences and words' },
-  { id: 'edit-boards', label: 'Edit boards', blurb: 'Tap a button to change its picture' },
-  { id: 'edit-icons', label: 'Edit icons', blurb: 'Change the picture for any word' },
-  { id: 'add-image', label: 'Add image', blurb: 'Upload your own photo' },
+  {
+    id: 'edit-boards',
+    label: 'Edit boards',
+    blurb: 'Change pictures, remove folders, add words',
+  },
+  { id: 'add-image', label: 'Add image', blurb: 'Upload your own photo for a word' },
   { id: 'saved-boards', label: 'Saved boards', blurb: 'Situations already described' },
   { id: 'settings', label: 'Settings', blurb: 'Size, spacing, eyesight, voice' },
 ];
