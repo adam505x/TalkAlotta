@@ -146,12 +146,21 @@ const AGE_OPTIONS: { value: number; label: string }[] = [
  * is set at a readable measure and a size that holds its own next to the
  * heading, rather than being boxed off as an aside.
  */
-function Guide({ children, center = false }: { children: React.ReactNode; center?: boolean }) {
+function Guide({
+  children,
+  center = false,
+  wide = false,
+}: {
+  children: React.ReactNode;
+  center?: boolean;
+  /** Wider measure for full-width steps (e.g. tap). Left edge stays put. */
+  wide?: boolean;
+}) {
   return (
     <div
-      className={`type-body flex max-w-[62ch] flex-col gap-3 ${
-        center ? 'mx-auto text-center' : ''
-      }`}
+      className={`type-body flex flex-col gap-3 ${
+        wide ? 'max-w-none' : 'max-w-[62ch]'
+      } ${center ? 'mx-auto text-center' : ''}`}
       style={{ color: 'var(--ink-soft)' }}
     >
       {children}
@@ -174,6 +183,7 @@ function StepLayout({
   children,
   action,
   wide = false,
+  center = false,
   scrollAnswer = true,
 }: {
   title: string;
@@ -181,6 +191,8 @@ function StepLayout({
   children?: React.ReactNode;
   action: React.ReactNode;
   wide?: boolean;
+  /** Title, guide and answer stacked and centred (confirmation steps). */
+  center?: boolean;
   scrollAnswer?: boolean;
 }) {
   // The action sits below both columns rather than inside one of them, so it
@@ -198,6 +210,19 @@ function StepLayout({
         <h2 className="type-title shrink-0">{title}</h2>
         <div className="shrink-0">{guide}</div>
         <div className="min-h-0 flex-1">{children}</div>
+        {footer}
+      </section>
+    );
+  }
+
+  if (center) {
+    return (
+      <section className="flex min-h-0 flex-1 flex-col gap-5">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
+          <h2 className="type-title shrink-0 text-center">{title}</h2>
+          <div className="w-full max-w-lg shrink-0">{guide}</div>
+          <div className="w-full max-w-lg shrink-0">{children}</div>
+        </div>
         {footer}
       </section>
     );
@@ -323,7 +348,7 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Profile, one field per screen, all optional.
+  // Profile, one field per screen. No pre-selection; Continue stays disabled until a pick.
   const [age, setAge] = useState<number | null>(null);
   const [gender, setGender] = useState('');
   const [nationality, setNationality] = useState('');
@@ -331,7 +356,7 @@ export default function OnboardingPage() {
 
   // Vision: no pre-selection. Continue stays disabled until the caregiver picks one.
   const [vision, setVision] = useState<VisionCategory | null>(null);
-  const [routine, setRoutine] = useState('varies');
+  const [routine, setRoutine] = useState<string | null>(null);
 
   // Tap calibration
   const [tapIndex, setTapIndex] = useState(0);
@@ -548,14 +573,19 @@ export default function OnboardingPage() {
                 It also feeds the voice choice further on. A child speaking with an adult voice is
                 one of the common reasons a device gets abandoned, so it is worth a moment now.
               </p>
-              <p>
-                A rough band is all that is needed, and this is optional. Skip it and standard
-                starter words are used.
-              </p>
+              <p>A rough band is all that is needed.</p>
             </Guide>
           }
           action={
-            <Button size="xl" className="w-full" onClick={() => goto('profile_gender')}>
+            <Button
+              size="xl"
+              className="w-full"
+              disabled={age === null}
+              onClick={() => {
+                if (age === null) return;
+                goto('profile_gender');
+              }}
+            >
               Continue
             </Button>
           }
@@ -583,11 +613,19 @@ export default function OnboardingPage() {
                 to be heard with. The board speaks in their place, so the voice is treated as part
                 of how they present themselves, not as a setting.
               </p>
-              <p>It is optional, and it can be changed at any time in Settings.</p>
+              <p>It can be changed at any time in Settings.</p>
             </Guide>
           }
           action={
-            <Button size="xl" className="w-full" onClick={() => goto('profile_nationality')}>
+            <Button
+              size="xl"
+              className="w-full"
+              disabled={!gender}
+              onClick={() => {
+                if (!gender) return;
+                goto('profile_nationality');
+              }}
+            >
               Continue
             </Button>
           }
@@ -617,13 +655,21 @@ export default function OnboardingPage() {
                 board sounding like it belongs to them rather than to the software.
               </p>
               <p>
-                Optional. Start typing to narrow the list, or open it and scroll. If the place you
-                want is not listed, type it anyway and it is kept as you wrote it.
+                Start typing to narrow the list, or open it and scroll. If the place you want is not
+                listed, type it anyway and it is kept as you wrote it.
               </p>
             </Guide>
           }
           action={
-            <Button size="xl" className="w-full" onClick={() => goto('profile_relationship')}>
+            <Button
+              size="xl"
+              className="w-full"
+              disabled={!nationality.trim()}
+              onClick={() => {
+                if (!nationality.trim()) return;
+                goto('profile_relationship');
+              }}
+            >
               Continue
             </Button>
           }
@@ -651,8 +697,9 @@ export default function OnboardingPage() {
             <Button
               size="xl"
               className="w-full"
-              disabled={saving}
-              onClick={() =>
+              disabled={saving || !relationship}
+              onClick={() => {
+                if (!relationship) return;
                 void saveAndContinue(
                   {
                     age,
@@ -661,8 +708,8 @@ export default function OnboardingPage() {
                     caregiverRelationship: relationship || null,
                   },
                   'vision',
-                )
-              }
+                );
+              }}
             >
               Continue
             </Button>
@@ -737,7 +784,7 @@ export default function OnboardingPage() {
           wide
           title="Tap the circle"
           guide={
-            <Guide>
+            <Guide wide>
               <p>
                 Five circles appear one after another. Hand the iPad over and let them tap the way
                 they normally would, without guiding their hand. The middle is the real target, and
@@ -848,8 +895,11 @@ export default function OnboardingPage() {
             <Button
               size="xl"
               className="w-full"
-              disabled={saving}
-              onClick={() => void saveAndContinue({ routine }, 'voice')}
+              disabled={saving || !routine}
+              onClick={() => {
+                if (!routine) return;
+                void saveAndContinue({ routine }, 'voice');
+              }}
             >
               Continue
             </Button>
@@ -871,10 +921,10 @@ export default function OnboardingPage() {
 
       {step === 'voice' ? (
         <StepLayout
+          center
           title="How should the voice sound?"
-          scrollAnswer={false}
           guide={
-            <Guide>
+            <Guide center>
               <p>Worked out from the answers you gave. Have a listen and confirm.</p>
             </Guide>
           }
@@ -899,30 +949,30 @@ export default function OnboardingPage() {
           }
         >
           <div
-            className="rounded-[14px] p-5"
+            className="flex flex-col items-center gap-4 rounded-[14px] px-6 py-5 text-center"
             style={{ border: '1px solid var(--line)', background: 'var(--card)' }}
           >
-            <p className="text-[17px] font-semibold">{voice?.label ?? 'Standard voice'}</p>
-            <p className="type-footnote mt-1" style={{ color: 'var(--ink-soft)' }}>
-              {voice?.rationale ?? 'One standard voice is available at the moment.'}
-            </p>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button
-                size="lg"
-                variant="secondary"
-                onClick={async () => {
-                  setVoiceTried(true);
-                  await speak('Hello, my name is TalkAlotta.', { kind: 'sentence' });
-                }}
-              >
-                Hear the voice
-              </Button>
-              {voiceTried ? (
-                <span className="self-center text-sm" style={{ color: 'var(--ink-soft)' }}>
-                  If nothing played, the browser voice will be used instead.
-                </span>
-              ) : null}
+            <div>
+              <p className="text-[17px] font-semibold">{voice?.label ?? 'Standard voice'}</p>
+              <p className="type-footnote mt-1" style={{ color: 'var(--ink-soft)' }}>
+                {voice?.rationale ?? 'One standard voice is available at the moment.'}
+              </p>
             </div>
+            <Button
+              size="lg"
+              variant="secondary"
+              onClick={async () => {
+                setVoiceTried(true);
+                await speak('Hello, my name is TalkAlotta.', { kind: 'sentence' });
+              }}
+            >
+              Hear the voice
+            </Button>
+            {voiceTried ? (
+              <p className="type-footnote" style={{ color: 'var(--ink-soft)' }}>
+                If nothing played, the browser voice will be used instead.
+              </p>
+            ) : null}
           </div>
         </StepLayout>
       ) : null}
