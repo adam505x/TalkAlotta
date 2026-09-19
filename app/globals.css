@@ -2,19 +2,36 @@
 
 /* ---------------------------------------------------------------------------
    TalkAlotta design tokens.
+
+   The neutral palette, the accent and the type follow Apple's system values so
+   the caregiver-facing screens feel native on the iPad they run on.
+
    Role colours follow the Fitzgerald key, the long-standing AAC convention for
-   colour-coding word types. Colour is never the only signal: every tile also
-   carries a visible text label.
+   colour-coding word types, and are deliberately NOT Apple colours. Colour is
+   never the only signal: every tile also carries a visible text label.
 --------------------------------------------------------------------------- */
 :root {
   color-scheme: light;
 
-  --ink: #14161a;
-  --ink-soft: #5b6472;
-  --paper: #f6f7f9;
+  /* Neutrals, from the iOS system palette. */
+  --ink: #1c1c1e;
+  --ink-soft: #6c6c70;
+  --paper: #f2f2f7;
   --card: #ffffff;
-  --line: #d9dee6;
-  --focus: #1d4ed8;
+  --line: #d1d1d6;
+
+  /* Accent: iOS system blue, its pressed shade, and the text that sits on it. */
+  --focus: #007aff;
+  --focus-strong: #0062cc;
+  --focus-ink: #ffffff;
+  /* Accent washes for tinted controls and selected rows. */
+  --tint-soft: rgb(0 122 255 / 0.10);
+  --tint-strong: rgb(0 122 255 / 0.18);
+  /* The grey a row flashes while a finger is down on it. */
+  --fill-press: rgb(120 120 128 / 0.16);
+
+  --danger: #ff3b30;
+  --danger-soft: rgb(255 59 48 / 0.12);
 
   /* Fitzgerald-style role colours: tint background, strong border. */
   --role-core-bg: #fff8d6;
@@ -33,6 +50,10 @@
   --tile-radius: 16px;
   --tile-gap: 12px;
   --icon-scale: 1;
+
+  /* The curve iOS uses for sheets and pushes. Everything non-gestural uses it,
+     so nothing in the app eases a different way from anything else. */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* Cortical visual impairment and low vision: strip visual noise rather than
@@ -44,6 +65,9 @@
   --ink: #ffffff;
   --ink-soft: #d0d4da;
   --line: #ffffff;
+  --tint-soft: transparent;
+  --tint-strong: transparent;
+  --fill-press: rgb(255 255 255 / 0.22);
   --role-core-bg: #000;
   --role-action-bg: #000;
   --role-object-bg: #000;
@@ -59,10 +83,41 @@ body {
   padding: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* -apple-system first so iPadOS serves SF Pro, which already ships the
+     optical sizing and tracking tables the type below leans on. */
+  font-family: -apple-system, BlinkMacSystemFont, ui-sans-serif, system-ui, "Segoe UI", Roboto,
+    sans-serif;
   /* Stop iOS inflating text in landscape. */
   -webkit-text-size-adjust: 100%;
   overscroll-behavior: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Type. Tracking is size-specific: large text reads too loose as it grows, so
+   it tightens, while body copy sits at zero. One letter-spacing value for
+   every size would be wrong at one end or the other.
+--------------------------------------------------------------------------- */
+.type-display {
+  font-size: clamp(1.75rem, 3.2vw, 2.5rem);
+  line-height: 1.07;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+.type-title {
+  font-size: clamp(1.4rem, 2.2vw, 1.875rem);
+  line-height: 1.15;
+  letter-spacing: -0.021em;
+  font-weight: 700;
+}
+.type-body {
+  font-size: 1.0625rem; /* 17px, the iOS body size */
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+.type-footnote {
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.35;
+  letter-spacing: 0.005em;
 }
 
 /* The board is a kiosk surface: no text selection, no double-tap zoom,
@@ -85,13 +140,172 @@ button {
   outline-offset: 2px;
 }
 
-/* Respect a reduced-motion preference; there is no decorative motion anyway. */
+/* ---------------------------------------------------------------------------
+   Grouped list rows, the iOS pattern for picking one option from a few.
+   Hairline separators inside a single rounded card, rather than a heavy border
+   drawn around every choice.
+--------------------------------------------------------------------------- */
+.option-group {
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.option-row {
+  transition: background-color 120ms ease-out;
+}
+/* Feedback lands on pointer-down, not on release. */
+.option-row:active {
+  background-color: var(--fill-press);
+}
+.option-row + .option-row {
+  border-top: 1px solid var(--line);
+}
+
+/* ---------------------------------------------------------------------------
+   Sliders. The default control renders as a small dark dot on iPad, which
+   reads as a glitch rather than a handle. Drawn here as the iOS slider: a thin
+   track, and a white handle that carries a shadow so it sits above the track.
+--------------------------------------------------------------------------- */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  width: 28px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 0.5px solid rgb(0 0 0 / 0.04);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+}
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+input[type="range"]::-moz-range-thumb {
+  height: 28px;
+  width: 28px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 0.5px solid rgb(0 0 0 / 0.04);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+}
+
+/* ---------------------------------------------------------------------------
+   Motion. Steps cross-fade and rise slightly; the sheet materialises rather
+   than simply fading, so it reads as a surface arriving.
+--------------------------------------------------------------------------- */
+@keyframes step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.step-enter {
+  animation: step-enter 360ms var(--ease-ios) both;
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.sheet-scrim {
+  animation: scrim-in 300ms var(--ease-ios) both;
+  background: rgb(0 0 0 / 0.28);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.sheet-panel {
+  animation: sheet-in 380ms var(--ease-ios) both;
+}
+
+/* The grabber at the top of a sheet: the iOS affordance that says this surface
+   is a layer sitting above the page. */
+.sheet-grabber {
+  width: 36px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+/* Tap-calibration feedback: a short ripple at the tap point, and a small
+   pop on the target itself. */
+@keyframes tap-ripple {
+  0% {
+    transform: translate(-50%, -50%) scale(0.35);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.4);
+    opacity: 0;
+  }
+}
+@keyframes tap-target-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  35% {
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Reduced motion keeps the meaning and drops the travel: things still fade,
+   they just no longer move. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  .step-enter,
+  .sheet-panel {
+    animation: scrim-in 160ms ease both;
+  }
+}
+
+/* Frosted surfaces go solid when the system asks for less transparency. */
+@media (prefers-reduced-transparency: reduce) {
+  .sheet-scrim {
+    background: rgb(0 0 0 / 0.55);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

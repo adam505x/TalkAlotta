@@ -4,22 +4,28 @@ import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/cn';
 
+/**
+ * iOS-style buttons: filled shapes with no stroke, 17px semibold label, and
+ * feedback that lands the instant a finger goes down rather than on release.
+ *
+ * Sizes are the caregiver's chrome, not the communicator's board. The board
+ * has its own tiles sized from the tap calibration; 44px stays the floor here
+ * because that is the smallest reliable touch target.
+ */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex select-none items-center justify-center gap-2 rounded-full font-semibold transition-[transform,background-color,opacity] duration-100 ease-out active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35',
   {
     variants: {
       variant: {
-        primary: 'bg-[var(--focus)] text-white hover:opacity-90',
-        secondary:
-          'border-2 border-[var(--line)] bg-[var(--card)] text-[var(--ink)] hover:border-[var(--ink-soft)]',
-        ghost: 'text-[var(--ink)] hover:bg-black/5',
-        danger: 'border-2 border-[#d6336c] bg-[var(--card)] text-[#d6336c]',
+        primary: 'bg-[var(--focus)] text-[var(--focus-ink)] active:bg-[var(--focus-strong)]',
+        secondary: 'bg-[var(--tint-soft)] text-[var(--focus)] active:bg-[var(--tint-strong)]',
+        ghost: 'text-[var(--focus)] active:bg-[var(--fill-press)]',
+        danger: 'bg-[var(--danger-soft)] text-[var(--danger)] active:opacity-75',
       },
       size: {
-        // 44px minimum height: the smallest reliable touch target.
-        md: 'min-h-[44px] px-4 py-2 text-base',
-        lg: 'min-h-[56px] px-6 py-3 text-lg',
-        xl: 'min-h-[72px] px-8 py-4 text-xl',
+        md: 'min-h-[44px] px-5 text-[17px]',
+        lg: 'min-h-[50px] px-6 text-[17px]',
+        xl: 'min-h-[56px] px-7 text-[17px]',
       },
     },
     defaultVariants: { variant: 'primary', size: 'md' },
