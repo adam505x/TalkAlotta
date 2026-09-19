@@ -989,7 +989,7 @@ export default function OnboardingPage() {
             <Button size="xl" onClick={() => router.push('/board')}>
               Open the board
             </Button>
-            <Button size="xl" variant="secondary" onClick={() => router.push('/describe')}>
+            <Button size="xl" variant="secondary" onClick={() => router.push('/board?situation=1')}>
               Describe a situation first
             </Button>
           </div>
