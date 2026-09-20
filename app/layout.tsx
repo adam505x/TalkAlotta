@@ -1,5 +1,25 @@
 import type { Metadata, Viewport } from 'next';
+import { Fredoka, Nunito_Sans } from 'next/font/google';
 import './globals.css';
+
+/**
+ * The brand sheet pairs Fredoka for the brand and headings with Nunito Sans for
+ * running text. Both are self-hosted by next/font, so a demo iPad on venue wifi
+ * never waits on a font CDN.
+ */
+const fredoka = Fredoka({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-brand',
+  display: 'swap',
+});
+
+const nunitoSans = Nunito_Sans({
+  subsets: ['latin'],
+  weight: ['400', '600', '700'],
+  variable: '--font-text',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'TalkAlotta',
@@ -43,7 +63,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${fredoka.variable} ${nunitoSans.variable}`}>
       <body className="kiosk min-h-dvh">{children}</body>
     </html>
   );

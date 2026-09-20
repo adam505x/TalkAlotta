@@ -38,6 +38,7 @@ function createTables(sqlite: Database.Database) {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS profile (
       id INTEGER PRIMARY KEY,
+      name TEXT,
       age INTEGER,
       gender TEXT,
       nationality TEXT,
@@ -45,6 +46,7 @@ function createTables(sqlite: Database.Database) {
       vision TEXT NOT NULL DEFAULT 'unknown',
       tap_error_px INTEGER,
       grid_index INTEGER NOT NULL DEFAULT 2,
+      button_scale_pct INTEGER,
       gap_px INTEGER NOT NULL DEFAULT 12,
       icon_scale_pct INTEGER NOT NULL DEFAULT 100,
       routine TEXT NOT NULL DEFAULT 'varies',
@@ -175,6 +177,10 @@ function createTables(sqlite: Database.Database) {
 
   // Columns added after a database was first created. CREATE TABLE IF NOT EXISTS
   // will not add them to an existing file, so they are applied separately.
+  // Nullable additions only: anything needing a backfill or a rewrite is a real
+  // migration and does not belong in a startup path.
+  addColumn(sqlite, 'profile', 'name', 'TEXT');
+  addColumn(sqlite, 'profile', 'button_scale_pct', 'INTEGER');
   addColumn(sqlite, 'folder_words', 'location', 'TEXT');
   addColumn(sqlite, 'profile', 'speech_volume', 'INTEGER NOT NULL DEFAULT 100');
 

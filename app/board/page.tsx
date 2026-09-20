@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Tile } from '@/components/Tile';
 import { SentenceBar, type SentenceWord } from '@/components/SentenceBar';
@@ -51,6 +51,8 @@ interface BoardPayload {
   recommended: string[];
   layout: {
     grid: { cols: number; rows: number };
+    /** Fraction of its column each button fills. Set by the tap test in setup. */
+    buttonScale: number;
     gapPx: number;
     iconScale: number;
     vision: string;
@@ -83,6 +85,40 @@ type Overlay =
   | { kind: 'add' }
   | { kind: 'folderEdit'; folderId: string; folderTitle: string }
   | { kind: 'picture'; term: string; role: WordRole; onPicked?: (c: Candidate) => void };
+
+/**
+ * The gap that makes every button fill `scale` of its column.
+ *
+ * Seven columns share six gaps, so for a track to come out at `scale` of the
+ * column pitch the gap has to be (1 - scale) / 6 of the board's width. Size and
+ * spacing are one number on a fixed grid: whatever the button does not fill is
+ * the gap, which is exactly what the caregiver was setting in the setup preview.
+ *
+ * The width is measured rather than assumed. The stored gap was worked out
+ * against a nominal column width during setup, so on any other screen it drifts
+ * from the size that was actually chosen; measuring is what makes the board
+ * match the preview on the iPad it ends up on.
+ *
+ * Returns null until the first measurement, so the caller can fall back.
+ */
+function useButtonGap(scale: number) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [gap, setGap] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // The grid is full-width and the gap does not change that, so measuring the
+    // element the gap is applied to cannot feed back into its own width.
+    const measure = () => setGap((el.clientWidth * (1 - scale)) / (CORE_COLUMNS - 1));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scale]);
+
+  return { ref, gap };
+}
 
 export default function BoardPage() {
   const router = useRouter();
@@ -168,6 +204,10 @@ export default function BoardPage() {
   }, [data?.speechVolume]);
 
   const layout = data?.layout;
+
+  // Called before the loading return, so the hook order never changes. The
+  // fallback only stands in for the frame before the board's own data lands.
+  const { ref: gridRef, gap: measuredGap } = useButtonGap(layout?.buttonScale ?? 0.9);
 
   const currentPage = useMemo(
     () => (data && openFolder ? (data.pages.find((p) => p.id === openFolder) ?? null) : null),
@@ -413,6 +453,11 @@ export default function BoardPage() {
   // One grid, seven wide, filling the screen. The core rows and the strip
   // underneath share the same columns so their buttons line up exactly.
   const gridColumns = `repeat(${CORE_COLUMNS}, minmax(0, 1fr))`;
+
+  // Both grids take the same gap, so a button in the strip is the same size as
+  // one in the rows above. The stored gap stands in only until the first
+  // measurement lands.
+  const tileGap = measuredGap ?? layout.gapPx;
 
   /** Everything a press on the fixed board can mean. */
   const onFixedCell = (cell: CoreCell) => {

@@ -174,9 +174,26 @@ body {
   letter-spacing: -0.021em;
   font-weight: 700;
 }
+/* The question at the top of a setup step. Larger than .type-title so the
+   question and its explanation carry the left half of the screen against the
+   answers on the right, instead of sitting in a thin strip beside them. */
+.type-question {
+  font-size: clamp(1.55rem, 2.7vw, 2.125rem);
+  line-height: 1.13;
+  letter-spacing: -0.022em;
+  font-weight: 700;
+}
 .type-body {
   font-size: 1.0625rem;
   line-height: 1.5;
+  letter-spacing: 0;
+}
+/* Body copy a caregiver reads once, standing up, holding an iPad. Two points
+   over the iOS body size, which is what lets the explanation hold the left half
+   of a setup step against the answers on the right. */
+.type-body-lg {
+  font-size: 1.1875rem;
+  line-height: 1.52;
   letter-spacing: 0;
 }
 .type-footnote {
@@ -194,15 +211,35 @@ body {
   touch-action: manipulation;
 }
 
-button {
-  font: inherit;
-  color: inherit;
+/* In @layer base so it stays a default rather than a winner. Unlayered rules
+   beat every @layer, so outside a layer this `inherit` silently overrode any
+   text-colour utility on a button, which is why filled buttons came out with
+   dark body text instead of their own label colour. */
+@layer base {
+  button {
+    font: inherit;
+    color: inherit;
+  }
 }
 
 /* Visible focus for caregivers using a keyboard. */
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* A typed answer on a setup step. Same height and face as an option row, so a
+   question answered by typing looks like it belongs beside the ones answered by
+   picking. */
+.field-text {
+  min-height: 56px;
+  padding: 0 16px;
+  font-size: 17px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  outline: none;
 }
 
 /* Grouped list rows for onboarding picks. */
@@ -311,6 +348,129 @@ input[type="range"]::-moz-range-thumb {
   background: var(--line);
 }
 
+/* ------------------------------------------------------- tap calibration ---
+   The one physical measurement in setup, so it is drawn as an instrument: a
+   recessed panel, a faint graticule, and a target made of concentric rings
+   around a crosshair. No colour or shape here carries meaning on its own, and
+   the aiming point stays a single unambiguous spot, which is the part that has
+   to survive for the measurement to mean anything.
+-------------------------------------------------------------------------- */
+.tap-surface {
+  border-radius: 20px;
+  background-color: var(--card);
+  /* Graticule. Deliberately near the threshold of visible: it reads as a
+     measuring surface without giving the eye anything to land on instead of
+     the target. */
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--ink) 7%, transparent) 0 1px,
+      transparent 1px 56px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--ink) 7%, transparent) 0 1px,
+      transparent 1px 56px
+    );
+  background-position: center;
+  border: 1px solid var(--line);
+  box-shadow:
+    inset 0 2px 6px color-mix(in srgb, var(--ink) 7%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--card) 80%, transparent);
+}
+
+/* Centred on the measured point. Children stack on the one grid cell, so every
+   ring shares that centre and nothing has to be offset by hand. */
+.tap-target {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+}
+.tap-target > * {
+  grid-area: 1 / 1;
+}
+/* Tolerance falloff: how much room there is either side of the target. */
+.tap-target__falloff {
+  width: var(--tap-zone);
+  height: var(--tap-zone);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--tap-accent) 26%, transparent) 0%,
+    color-mix(in srgb, var(--tap-accent) 9%, transparent) 60%,
+    transparent 100%
+  );
+}
+/* The edge of that tolerance, stated rather than implied. */
+.tap-target__tolerance {
+  width: var(--tap-zone);
+  height: var(--tap-zone);
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--tap-accent-ink) 45%, transparent);
+}
+.tap-target__mark {
+  display: grid;
+  place-items: center;
+}
+.tap-target__mark > * {
+  grid-area: 1 / 1;
+}
+.tap-target__core {
+  width: var(--tap-core);
+  height: var(--tap-core);
+  border-radius: 50%;
+  background: var(--tap-accent-wash);
+  border: 3px solid var(--tap-accent-ink);
+  box-shadow:
+    0 2px 6px color-mix(in srgb, var(--ink) 18%, transparent),
+    inset 0 0 0 4px color-mix(in srgb, var(--card) 72%, transparent);
+}
+/* Crosshair through the exact centre: the point taps are measured against. */
+.tap-target__crosshair {
+  width: calc(var(--tap-core) - 30px);
+  height: calc(var(--tap-core) - 30px);
+  background-image:
+    linear-gradient(
+      to right,
+      transparent calc(50% - 0.5px),
+      color-mix(in srgb, var(--tap-accent-ink) 75%, transparent) calc(50% - 0.5px)
+        calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    ),
+    linear-gradient(
+      to bottom,
+      transparent calc(50% - 0.5px),
+      color-mix(in srgb, var(--tap-accent-ink) 75%, transparent) calc(50% - 0.5px)
+        calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    );
+}
+.tap-target__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tap-accent-ink);
+}
+
+/* How many targets are left, without words. */
+.tap-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  background: transparent;
+}
+.tap-pip--done {
+  background: var(--role-modifier-line);
+  border-color: var(--role-modifier-line);
+}
+.tap-pip--current {
+  border-width: 2px;
+  border-color: var(--role-modifier-line);
+  transform: scale(1.3);
+}
+
 @keyframes tap-ripple {
   0% {
     transform: translate(-50%, -50%) scale(0.35);
@@ -321,15 +481,17 @@ input[type="range"]::-moz-range-thumb {
     opacity: 0;
   }
 }
-@keyframes tap-target-pop {
+/* The core is centred by its grid cell, not by a transform, so this is a plain
+   scale with nothing to preserve. */
+@keyframes tap-core-pop {
   0% {
-    transform: translate(-50%, -50%) scale(1);
+    transform: scale(1);
   }
   35% {
-    transform: translate(-50%, -50%) scale(1.2);
+    transform: scale(1.16);
   }
   100% {
-    transform: translate(-50%, -50%) scale(1);
+    transform: scale(1);
   }
 }
 
@@ -469,6 +631,44 @@ input[type="range"]::-moz-range-thumb {
   border-bottom-right-radius: 6px;
   background: rgba(12, 14, 18, 0.28);
 }
+/* The setup size preview: a miniature of the locked front board.
+
+   Seven across and four down, always. The grid has NO gap, so every cell sits
+   flush against its neighbour and the cells themselves never move. What the
+   size slider changes is how much of its cell each button fills, which is why
+   shrinking a button opens up the space around it and growing one closes that
+   space back up. Size and spacing are one control, not two, and drawing it this
+   way is the only honest way to show that. */
+.board-preview {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  width: 100%;
+  /* Four square rows are tall. Capped and centred so the preview stays a
+     preview and does not push the buttons below it off a short screen. */
+  max-width: 420px;
+  margin-inline: auto;
+}
+
+.board-preview__cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-width: 0;
+}
+
+/* Held square rather than at the board's 1/0.92, because what this preview is
+   read for is size and spacing, and a square is the plainest way to show both.
+   The radius is a percentage so it stays in proportion as the button shrinks.
+   No transition on the width: the slider is dragged, and it should track the
+   thumb exactly rather than chase it. */
+.board-preview__button {
+  width: calc(100% * var(--button-scale, 0.9));
+  aspect-ratio: 1;
+  border: 2px solid var(--role-object-line);
+  border-radius: 16%;
+  background: var(--role-object-bg);
+}
+
 .cell__edit-mark {
   position: absolute;
   top: 4px;
@@ -810,4 +1010,163 @@ input[type="range"]::-moz-range-thumb {
 :root[data-vision="low_vision"] .page-light {
   background: #000;
   color: #fff;
+}
+
+/* ---------------------------------------------------------------------------
+   BRAND SURFACE — the caregiver-facing setup flow.
+
+   Every brand token is scoped to this class rather than :root on purpose. The
+   brand sheet's misuse board is explicit that brand colours must never enter
+   the card colour space, and the Fitzgerald --role-* tokens on :root ARE that
+   space. Scoping here means the palette physically cannot reach the board.
+
+   Palette: flag colours for the logo and large shapes, the darkened pair for
+   anything carrying text.
+--------------------------------------------------------------------------- */
+.brand-surface {
+  --brand-green: #169b62; /* PMS 347 U */
+  --brand-orange: #ff883e; /* PMS 151 U */
+  --brand-green-text: #0e7a4c;
+  --brand-orange-text: #b34a0e;
+  --brand-ink: #1b1b1a;
+  --brand-ink-soft: #5f6560;
+  --brand-muted: #dce0db;
+  --brand-paper: #f4f5f3;
+
+  /* The shared control tokens, remapped for this subtree only. */
+  --focus: var(--brand-green-text);
+  --focus-strong: #0a5c3a;
+  --focus-ink: #ffffff;
+  --tint-soft: rgb(22 155 98 / 0.1);
+  --tint-strong: rgb(22 155 98 / 0.18);
+  --fill-press: rgb(27 27 26 / 0.06);
+
+  /* The tap target. Orange because it is the palette's accent and because the
+     rest of this flow is green: the one thing on screen to aim at must not
+     read as another button. Every edge uses the darkened pair, per the
+     palette's rule that anything carrying detail takes the text-safe shade. */
+  --tap-accent: var(--brand-orange);
+  --tap-accent-ink: var(--brand-orange-text);
+  --tap-accent-wash: color-mix(in srgb, var(--brand-orange) 20%, #ffffff);
+  /* Hit and miss. Green reads as the affirmative everywhere else here, and the
+     miss borrows the existing danger red rather than inventing one. */
+  --tap-hit: var(--brand-green);
+  --tap-hit-wash: color-mix(in srgb, var(--brand-green) 16%, #ffffff);
+  --tap-miss: var(--danger);
+  --tap-miss-wash: color-mix(in srgb, var(--danger) 16%, #ffffff);
+  --ink: var(--brand-ink);
+  --ink-soft: var(--brand-ink-soft);
+  --line: var(--brand-muted);
+  --card: #ffffff;
+
+  background: var(--brand-paper);
+  color: var(--brand-ink);
+  font-family: var(--font-text), system-ui, sans-serif;
+}
+
+/* Fredoka carries the brand and the headings, Nunito Sans everything that gets
+   read. Sizes are the brand sheet's: display 44 / 30 / 21 at weight 500, body
+   17 regular, lead 19 semibold, caption 14. */
+.brand-surface .type-display,
+.brand-surface .type-title,
+.brand-surface .brand-wordmark {
+  font-family: var(--font-brand), system-ui, sans-serif;
+  font-weight: 500;
+}
+.brand-surface .type-display {
+  font-size: clamp(2rem, 3.4vw, 2.75rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.brand-surface .type-title {
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+}
+.brand-surface .type-body {
+  font-size: 1.0625rem;
+  font-weight: 400;
+  line-height: 1.52;
+}
+.brand-surface .type-body-lg {
+  font-size: 1.1875rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.brand-surface .type-footnote {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+/* The wordmark. Never respaced: the tracking is part of the lockup. */
+.brand-wordmark {
+  font-family: var(--font-brand), system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--brand-ink);
+}
+
+/* ---------------------------------------------------------------------------
+   Bubble face motion.
+
+   The brand sheet specifies the face as a swap, not an animation, and the five
+   expressions still swap rather than tween. What moves is the whole bubble,
+   drifting the way a held balloon does, which reads as alive without animating
+   the artwork itself. Sine in-out because a float has no start or end.
+--------------------------------------------------------------------------- */
+@keyframes bubble-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.bubble-bob {
+  animation: bubble-bob 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+/* The blink. An eyes-only character has no other way to look alive, and a long
+   gap between short closures is what keeps it from reading as a twitch. The
+   origin is the eye centre line in viewBox units, so the lids close onto the
+   eye rather than collapsing toward the top of the head. */
+@keyframes glyph-blink {
+  0%,
+  91%,
+  100% {
+    transform: scaleY(1);
+  }
+  94.5% {
+    transform: scaleY(0.1);
+  }
+}
+.glyph-eyes {
+  animation: glyph-blink 5.4s ease-in-out infinite;
+  transform-box: view-box;
+  transform-origin: 65px 61px;
+}
+
+/* The face fades in on a swap so the change is legible rather than a hard cut. */
+@keyframes face-swap {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.face-swap {
+  animation: face-swap 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Drop the travel and the blink, keep the fade: expressions still swap,
+     nothing drifts or flickers. */
+  .bubble-bob,
+  .glyph-eyes {
+    animation: none;
+  }
 }
