@@ -662,11 +662,13 @@ input[type="range"]::-moz-range-thumb {
    No transition on the width: the slider is dragged, and it should track the
    thumb exactly rather than chase it. */
 .board-preview__button {
+  /* A span is inline, and width and aspect-ratio do nothing to an inline box. */
+  display: block;
   width: calc(100% * var(--button-scale, 0.9));
   aspect-ratio: 1;
-  border: 2px solid var(--role-object-line);
+  border: 2px solid var(--line);
   border-radius: 16%;
-  background: var(--role-object-bg);
+  background: var(--card);
 }
 
 .cell__edit-mark {
