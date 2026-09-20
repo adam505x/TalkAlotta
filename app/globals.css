@@ -3,8 +3,9 @@
 /* ---------------------------------------------------------------------------
    TalkAlotta design tokens.
 
-   Palette follows the reference project: near-black app chrome, a slightly
-   lighter grey board panel, off-white bars, teal as the single accent.
+   Board chrome is near-black with teal as the board accent. Caregiver screens
+   (onboarding, settings) also carry iOS system blue tokens so those flows can
+   stay native on the iPad without fighting the board palette.
 
    Tile colours follow the Fitzgerald key, the long-standing AAC convention for
    colour-coding word types. Colour is never the only signal: every tile also
@@ -27,6 +28,19 @@
      board is in a state where a tap changes something instead of speaking. */
   --edit: #b4541f;
   --edit-ink: #fdf0e7;
+
+  /* Caregiver / onboarding accent: iOS system blue. The board keeps teal; these
+     are only for the screens a caregiver reads and types on. */
+  --focus: #007aff;
+  --focus-strong: #0062cc;
+  --focus-ink: #ffffff;
+  --tint-soft: rgb(0 122 255 / 0.10);
+  --tint-strong: rgb(0 122 255 / 0.18);
+  --fill-press: rgb(120 120 128 / 0.16);
+  --danger-soft: rgb(255 59 48 / 0.12);
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --tile-gap: 12px;
+  --icon-scale: 1;
 
   /* Text used on top of the dark chrome. */
   --on-chrome: #e8eaed;
@@ -92,6 +106,11 @@
   --paper-dim: #000000;
   --ink: #ffffff;
   --ink-soft: #d0d4da;
+  --card: #000000;
+  --line: #ffffff;
+  --tint-soft: transparent;
+  --tint-strong: transparent;
+  --fill-press: rgb(255 255 255 / 0.22);
   --on-chrome: #ffffff;
   --on-chrome-soft: #d0d4da;
 
@@ -132,10 +151,38 @@ body {
   height: 100%;
   background: var(--chrome);
   color: var(--on-chrome);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* -apple-system first so iPadOS serves SF Pro on caregiver screens. */
+  font-family: -apple-system, BlinkMacSystemFont, ui-sans-serif, system-ui, "Segoe UI", Roboto,
+    sans-serif;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Type. Tracking is size-specific: large text tightens, body sits at zero.
+--------------------------------------------------------------------------- */
+.type-display {
+  font-size: clamp(1.75rem, 3.2vw, 2.5rem);
+  line-height: 1.07;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+.type-title {
+  font-size: clamp(1.4rem, 2.2vw, 1.875rem);
+  line-height: 1.15;
+  letter-spacing: -0.021em;
+  font-weight: 700;
+}
+.type-body {
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+.type-footnote {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  letter-spacing: 0.005em;
 }
 
 /* The board is a kiosk surface: no text selection, no double-tap zoom,
@@ -154,8 +201,136 @@ button {
 
 /* Visible focus for caregivers using a keyboard. */
 :focus-visible {
-  outline: 3px solid #ffffff;
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* Grouped list rows for onboarding picks. */
+.option-group {
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.option-row {
+  transition: background-color 120ms ease-out;
+}
+.option-row:active {
+  background-color: var(--fill-press);
+}
+.option-row + .option-row {
+  border-top: 1px solid var(--line);
+}
+
+/* iOS-style range thumbs for caregiver size sheets. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  width: 28px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 0.5px solid rgb(0 0 0 / 0.04);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+}
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+input[type="range"]::-moz-range-thumb {
+  height: 28px;
+  width: 28px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 0.5px solid rgb(0 0 0 / 0.04);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+}
+
+@keyframes step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.step-enter {
+  animation: step-enter 360ms var(--ease-ios) both;
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.sheet-scrim {
+  animation: scrim-in 300ms var(--ease-ios) both;
+  background: rgb(0 0 0 / 0.28);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.sheet-panel {
+  animation: sheet-in 380ms var(--ease-ios) both;
+}
+
+.sheet-grabber {
+  width: 36px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+@keyframes tap-ripple {
+  0% {
+    transform: translate(-50%, -50%) scale(0.35);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.4);
+    opacity: 0;
+  }
+}
+@keyframes tap-target-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  35% {
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -164,6 +339,18 @@ button {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  .step-enter,
+  .sheet-panel {
+    animation: scrim-in 160ms ease both;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sheet-scrim {
+    background: rgb(0 0 0 / 0.55);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

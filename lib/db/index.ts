@@ -195,6 +195,9 @@ function build() {
 }
 
 const instance = globalThis.__talkalottaDb ?? build();
+// Always re-run CREATE TABLE IF NOT EXISTS so a long-lived hot-reload
+// singleton still picks up tables added after the process first started.
+createTables(instance.sqlite);
 if (process.env.NODE_ENV !== 'production') {
   globalThis.__talkalottaDb = instance;
 }
