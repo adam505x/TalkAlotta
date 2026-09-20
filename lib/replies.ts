@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
 import { contextKey, type MomentContext } from './context';
+import { resolveWord } from './board';
+import { CONFIDENCE_THRESHOLD } from './symbol-search';
+import type { WordRole } from './core-words';
 
 /**
  * Works out what the communicator might want to SAY BACK to something that was
@@ -128,14 +131,159 @@ function remember(key: string, replies: Replies): void {
   }
 }
 
+/**
+ * Pictures for the replies, keyed by the reply text.
+ *
+ * Keyed by text rather than by slot so the client looks a button's picture up the
+ * same way the board looks up its tiles, and a missing key simply means no
+ * picture — the text alone still works.
+ */
+export type ReplyIcons = Record<string, string>;
+
+/**
+ * Words no picture should be chosen from. Function words and politeness carry no
+ * image, and searching them returns something confidently wrong: "for" matches a
+ * pictogram of the number four.
+ *
+ * "yes" and "no" are deliberately NOT in here. When a reply actually says "no
+ * thanks", the no pictogram is what that reply means, and showing it is reading
+ * the words rather than decorating the slot.
+ */
+const NOT_PICTURABLE = new Set([
+  'i', 'me', 'my', 'you', 'your', 'it', 'its', 'that', 'this', 'they', 'them',
+  'he', 'him', 'his', 'she', 'her', 'we', 'us', 'our',
+  'a', 'an', 'the', 'some', 'any', 'one',
+  'is', 'am', 'are', 'was', 'be', 'do', 'does', 'did', 'have', 'has', 'had',
+  'can', 'could', 'would', 'will', 'shall', 'should', 'may', 'might',
+  'to', 'of', 'for', 'in', 'on', 'at', 'with', 'and', 'or', 'but', 'so',
+  'not', 'dont', "don't",
+  'please', 'thanks', 'thank', 'ok', 'okay', 'just', 'very', 'really', 'bit',
+]);
+
+/**
+ * The picture for one generated reply.
+ *
+ * The whole phrase is searched first, because the library often has the exact
+ * thing — "orange juice" is a pictogram, and taking it beats picking one of its
+ * two words. Only if that misses are the individual content words tried.
+ *
+ * Nothing below CONFIDENCE_THRESHOLD is used. That is the bar the rest of the app
+ * uses to decide a match is too weak to accept without a caregiver confirming it,
+ * and nobody confirms these: they appear mid-conversation and get pressed. A
+ * button carrying the right words and no picture is honest; one carrying a
+ * confidently wrong picture invites a mis-tap.
+ */
+/** CONFIDENCE_THRESHOLD as resolveWord reports it: 0-100 rather than 0-1. */
+const MIN_CONFIDENCE = Math.round(CONFIDENCE_THRESHOLD * 100);
+
+/**
+ * Looks a term up through the board's resolver, which writes what it finds to
+ * word_symbols. Going through it rather than straight to the matcher is what
+ * stops every turn re-searching the library over the network: the second time
+ * anyone says "milk please" the picture is already in the database.
+ */
+async function pictureFor(
+  term: string,
+  role: WordRole,
+): Promise<{ url: string; confidence: number } | null> {
+  const tile = await resolveWord(term, role);
+  if (!tile?.imageUrl) return null;
+  return { url: tile.imageUrl, confidence: tile.confidence ?? 0 };
+}
+
+/**
+ * Words that make a reply a refusal.
+ *
+ * These are checked before anything else, because illustrating a refusal with the
+ * thing being refused inverts it: "I don't want to go" drawn as the go pictogram
+ * reads as agreeing to go, to anyone using the pictures rather than the text.
+ * Getting negation wrong is the worst failure available here, so a negative reply
+ * is always shown as a negative.
+ */
+const NEGATIONS = new Set(['no', 'not', "don't", 'dont', 'never', 'nothing', 'neither']);
+
+async function iconForPhrase(phrase: string): Promise<string | null> {
+  const tokens = phrase
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.replace(/[^\p{L}\p{N}'-]/gu, ''))
+    .filter(Boolean);
+
+  if (tokens.some((t) => NEGATIONS.has(t))) {
+    return (await pictureFor('no', 'affirm'))?.url ?? null;
+  }
+
+  const whole = await pictureFor(phrase, 'noun');
+  if (whole && whole.confidence >= MIN_CONFIDENCE) return whole.url;
+
+  const words = tokens.filter((w) => w.length > 1 && !NOT_PICTURABLE.has(w));
+
+  // On equal confidence the later word wins. English puts the informative noun
+  // near the end, so "I want dad instead" should show dad rather than want, and
+  // "is she bringing lunch" lunch rather than a verb.
+  let best: { url: string; confidence: number } | null = null;
+  for (const word of words.slice(0, 4)) {
+    const found = await pictureFor(word, 'noun');
+    if (!found || found.confidence < MIN_CONFIDENCE) continue;
+    if (!best || found.confidence >= best.confidence) best = found;
+  }
+  return best?.url ?? null;
+}
+
+/**
+ * Pictures for a set of replies.
+ *
+ * Every slot is illustrated from its own words, including the three whose
+ * POSITIONS are fixed. Pinning those to yes, no and a question mark put the same
+ * three pictures on screen every turn regardless of what was said, so "orange
+ * juice please" showed a tick — the picture described the slot rather than the
+ * reply, which is no use to someone reading the pictures instead of the text.
+ * Fixed geometry is the thing worth protecting; fixed pictures are not.
+ *
+ * Resolved together rather than in sequence. These are looked up while someone is
+ * waiting to be answered, and six searches end to end would be felt.
+ */
+export async function resolveReplyIcons(replies: Replies): Promise<ReplyIcons> {
+  const texts = [replies.accept, replies.ask, replies.refuse, ...replies.options];
+
+  const found = await Promise.all(
+    texts.map(async (text) => {
+      try {
+        return [text, await iconForPhrase(text)] as const;
+      } catch {
+        // A picture is a nicety; failing to find one must not cost the reply.
+        return [text, null] as const;
+      }
+    }),
+  );
+
+  const icons: ReplyIcons = {};
+  for (const [text, url] of found) {
+    if (url) icons[text] = url;
+  }
+  return icons;
+}
+
 export async function generateReplies(
   heard: string,
   context: MomentContext,
+  /**
+   * Replies already offered for this turn and rejected by asking for new ones.
+   * Sent to the model as things not to say again, and folded into the cache key
+   * so a second ask cannot be answered from the first ask's entry.
+   */
+  avoid: string[] = [],
 ): Promise<{ replies: Replies; cached: boolean; generated: boolean }> {
   const said = heard.trim().slice(0, 400);
   if (!said) throw new Error('Nothing was heard.');
 
-  const key = `${contextKey(context)}|${said.toLowerCase()}`;
+  const rejected = avoid.map((a) => a.trim()).filter(Boolean);
+  const key = [
+    contextKey(context),
+    said.toLowerCase(),
+    rejected.map((r) => r.toLowerCase()).sort().join('~'),
+  ].join('|');
+
   const hit = cache.get(key);
   if (hit) return { replies: hit, cached: true, generated: true };
 
@@ -155,6 +303,11 @@ export async function generateReplies(
           context.location ? `Where they are: ${context.location}` : null,
           context.situation ? `What they are doing: ${context.situation}` : null,
           `Time of day: ${context.timeBucket}`,
+          // They looked at these and asked for others, so repeating any of them
+          // wastes the one thing this feature is spending: the listener's patience.
+          rejected.length
+            ? `They have already been offered these and want different ones. Do not repeat any of them, and do not merely rephrase them:\n${rejected.map((r) => `- ${r}`).join('\n')}`
+            : null,
         ]
           .filter(Boolean)
           .join('\n'),

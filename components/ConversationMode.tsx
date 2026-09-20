@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { speak } from '@/lib/speech';
-import type { Replies } from '@/lib/replies';
+import type { Replies, ReplyIcons } from '@/lib/replies';
 
 /**
  * Listens to whoever is talking TO the communicator, and puts replies on screen.
@@ -95,6 +95,7 @@ export function ConversationMode({
   const [message, setMessage] = useState<string | null>(null);
   const [heard, setHeard] = useState<string | null>(null);
   const [replies, setReplies] = useState<Replies | null>(null);
+  const [icons, setIcons] = useState<ReplyIcons>({});
   const [busy, setBusy] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [settled, setSettled] = useState(false);
@@ -135,6 +136,12 @@ export function ConversationMode({
   /** Only the newest reply generation may set state. An older one is dropped. */
   const replySeqRef = useRef(0);
 
+  /**
+   * Every reply offered so far this turn. Accumulated rather than replaced, so
+   * asking for new ones a second time does not bring the first set back.
+   */
+  const offeredRef = useRef<string[]>([]);
+
   /** Joins what has been heard this turn, in the order it was said. */
   const turnText = useCallback((): string => {
     const text = [...partsRef.current.entries()]
@@ -156,21 +163,27 @@ export function ConversationMode({
     // Replies to the previous question must not stay under the finger while a new
     // one is being asked. Pressing a stale one would answer the wrong question.
     setReplies(null);
+    setIcons({});
+    offeredRef.current = [];
     setSpoken(null);
     setSettled(false);
   }, []);
 
   const generate = useCallback(
-    async (turnId: number, text: string) => {
+    async (turnId: number, text: string, avoid: string[] = []) => {
       const id = ++replySeqRef.current;
       setBusy(true);
       try {
         const response = await fetch(`/api/replies?${contextQuery}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ heard: text }),
+          body: JSON.stringify({ heard: text, avoid }),
         });
-        const body = (await response.json()) as { replies?: Replies; error?: string };
+        const body = (await response.json()) as {
+          replies?: Replies;
+          icons?: ReplyIcons;
+          error?: string;
+        };
         if (id !== replySeqRef.current || turnId !== turnIdRef.current || !runningRef.current) {
           return;
         }
@@ -178,6 +191,14 @@ export function ConversationMode({
           throw new Error(body.error ?? 'Could not work out replies.');
         }
         setReplies(body.replies);
+        setIcons(body.icons ?? {});
+        offeredRef.current = [
+          ...offeredRef.current,
+          body.replies.accept,
+          body.replies.ask,
+          body.replies.refuse,
+          ...body.replies.options,
+        ];
         setSpoken(null);
         setMessage(null);
         setBusy(false);
@@ -347,6 +368,7 @@ export function ConversationMode({
     elapsedRef.current = 0;
     setHeard(null);
     setReplies(null);
+    setIcons({});
     setSettled(false);
     setPhase('on');
     beginSegment();
@@ -432,6 +454,27 @@ export function ConversationMode({
     await speak(text, { kind: 'sentence', words: text.trim().split(/\s+/) });
   }, []);
 
+  /**
+   * None of these fit: say so out loud, and fetch a different set.
+   *
+   * The holding phrase is the point of the button as much as the new replies are.
+   * A silent pause while six buttons are replaced is exactly when the other person
+   * gives up and answers for them, so the board fills that pause itself.
+   *
+   * Spoken before the request goes out, not after it returns, so the listener is
+   * asked to wait at the moment the waiting starts.
+   */
+  const newResponses = useCallback(async () => {
+    const text = heard;
+    if (!text) return;
+    setBusy(true);
+    void speak('One moment please', {
+      kind: 'sentence',
+      words: ['One', 'moment', 'please'],
+    });
+    await generate(turnIdRef.current, text, offeredRef.current);
+  }, [generate, heard]);
+
   const on = phase === 'on' || phase === 'starting';
 
   const status = () => {
@@ -443,15 +486,22 @@ export function ConversationMode({
     return 'Listening. Let them speak, then pause.';
   };
 
+  /**
+   * All one background. The pictures carry their own colour, and tinting the
+   * button behind them made them muddy. Slot identity is still there in the
+   * border, and it was never mainly colour anyway: accept and refuse are told
+   * apart by sitting at opposite ends.
+   */
   const tile = (text: string, tone: 'accept' | 'refuse' | 'ask' | 'plain') => {
-    const colours: Record<typeof tone, { bg: string; fg: string; border: string }> = {
-      accept: { bg: '#e8f4ea', fg: '#1d5b2c', border: '#8fbf9c' },
-      refuse: { bg: '#fdeae7', fg: '#a62f1e', border: '#e0a094' },
-      ask: { bg: '#eef1fb', fg: '#2f3a72', border: '#a3accd' },
-      plain: { bg: '#fff', fg: '#25272b', border: '#cfcfc4' },
+    const borders: Record<typeof tone, string> = {
+      accept: '#8fbf9c',
+      refuse: '#e0a094',
+      ask: '#a3accd',
+      plain: '#cfcfc4',
     };
-    const c = colours[tone];
+    const c = { bg: '#fff', fg: '#25272b', border: borders[tone] };
     const isSpoken = spoken === text;
+    const icon = icons[text];
     return (
       <button
         key={`${tone}:${text}`}
@@ -469,9 +519,35 @@ export function ConversationMode({
           lineHeight: 1.2,
           cursor: 'pointer',
           boxShadow: isSpoken ? '0 0 0 3px rgba(14,118,124,0.25)' : 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
         }}
       >
-        {text}
+        {/* The words stay put whether or not a picture was found, so a button
+            without one is not a different shape from the button beside it. */}
+        <span
+          aria-hidden="true"
+          style={{
+            height: 40,
+            display: 'grid',
+            placeItems: 'center',
+            width: '100%',
+          }}
+        >
+          {icon ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={icon}
+              alt=""
+              style={{ height: 40, width: 40, objectFit: 'contain' }}
+              draggable={false}
+            />
+          ) : null}
+        </span>
+        <span>{text}</span>
       </button>
     );
   };
@@ -541,6 +617,29 @@ export function ConversationMode({
         </div>
       ) : null}
 
+      {/* Deliberately unlike the replies above it: filled, full width, and out on
+          its own. Pressing it is not saying something, and it must not be mistaken
+          for a seventh thing to say. */}
+      {replies ? (
+        <button
+          type="button"
+          onClick={() => void newResponses()}
+          disabled={busy || !heard}
+          style={{
+            minHeight: 52,
+            borderRadius: 12,
+            border: 'none',
+            background: busy ? '#e7e7df' : '#3b3f46',
+            color: busy ? '#6c727b' : '#fff',
+            fontWeight: 800,
+            fontSize: 16,
+            cursor: busy || !heard ? 'default' : 'pointer',
+          }}
+        >
+          {busy ? 'Finding other replies…' : 'New responses'}
+        </button>
+      ) : null}
+
       {message ? (
         <p
           className="rounded-[10px] p-3 text-sm font-bold"
@@ -551,10 +650,6 @@ export function ConversationMode({
         </p>
       ) : null}
 
-      <p className="text-sm" style={{ color: '#6c727b' }}>
-        The microphone is open only while this says it is listening, and only
-        finished turns are sent to be written down. Nothing is kept afterwards.
-      </p>
     </div>
   );
 }

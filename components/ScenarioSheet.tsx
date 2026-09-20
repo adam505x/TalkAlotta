@@ -171,9 +171,13 @@ export function ScenarioSheet({
           </>
         )}
 
-        <button type="button" className="sheet__cancel" onClick={onClose}>
-          Cancel
-        </button>
+        {/* Only for describing. Listen-and-reply has its own way back, and a
+            second dismiss under the replies was one more thing to read past. */}
+        {mode === 'describe' ? (
+          <button type="button" className="sheet__cancel" onClick={onClose}>
+            Cancel
+          </button>
+        ) : null}
       </div>
     </div>
   );
