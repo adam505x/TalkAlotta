@@ -117,7 +117,7 @@ lib/
   interpret.ts        the one AI call: description -> concepts
   core-words.ts       core words, navigation icons, starter vocabulary
   sizing.ts           tap calibration and eyesight -> grid, spacing, icon scale
-  tts.ts              ElevenLabs, buffered and cached
+  tts.ts              Deepgram Aura, buffered and cached
   voice.ts            voice lookup (one stock voice today)
   speech.ts           browser side: iOS audio unlock, fallback voice
   board.ts            board assembly
@@ -296,25 +296,29 @@ demonstrating rather than to the communicator.
 Place is a text box with quick presets, so you can tap School or type Chick-fil-A
 and get what that business actually sells.
 
-## Switching model for the demo
+## Speech
 
-`eleven_flash_v2_5` is used during development because it is about half the cost.
-For the demo, change one line in `.env`:
+Board buttons speak through Deepgram Aura. The voice model is picked from the age,
+gender and nationality answers in `lib/voice.ts`, so Ireland and a male voice
+resolve to `aura-angus-en` while the United States resolves to an American model.
+Settings can change any of those answers, and the voice is re-resolved on save.
 
-```
-ELEVENLABS_MODEL_ID=eleven_multilingual_v2
-```
+Loudness is a caregiver setting rather than a fixed value, because Aura clips run
+quieter than the rest of the system. Settings has a volume slider, stored on the
+profile and applied in the browser through a Web Audio gain, which is the only way
+to go above the element's own maximum.
 
-Settings shows how many characters have been sent and how many presses the cache
-served for free.
+Settings also shows how many characters have been sent and how many presses the
+cache served for free.
 
 ## Not built yet
 
 Each of these has a `TODO` at the place the work goes.
 
-- **Accent and gender matched voices.** `lib/voice.ts` has an empty lookup table
-  and one stock voice. The setup answers are already asked, stored and confirmed,
-  so adding voices is a change to that table alone.
+- **Accent matching beyond the common cases.** Ireland, the UK nations, the US,
+  Canada, Australia and New Zealand, India and South Africa resolve to a matched
+  Aura model. Anything else falls back to a standard British voice, and widening
+  that is a change to the table in `lib/voice.ts` alone.
 - **Speaking the situation aloud.** `app/describe/page.tsx` has the marker. Typing
   works today.
 - **The dashboard of most-said sentences.** The data is recorded from the first
@@ -346,6 +350,6 @@ OpenSymbols client: reorder `SOURCE_TRUST` in `lib/symbol-search.ts` to put
 
 ## Keys
 
-`.env` is gitignored and holds the ElevenLabs, Anthropic and OpenSymbols
+`.env` is gitignored and holds the Deepgram, Anthropic and OpenSymbols
 credentials. All three have been pasted into chat transcripts at some point, so
 treat them as exposed and rotate them after the event.
