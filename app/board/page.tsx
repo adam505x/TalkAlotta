@@ -35,6 +35,8 @@ interface ApiPage {
   title: string;
   tiles: ApiTile[];
   role: WordRole;
+  /** Names the folder. Fixed, so refilling its words never repaints the button. */
+  icon: string;
 }
 
 interface BoardPayload {
@@ -213,7 +215,7 @@ export default function BoardPage() {
     return data.pages.map((page) => ({
       id: page.id,
       title: page.title,
-      cover: page.tiles[0]?.imageUrl ?? '',
+      cover: page.icon,
       role: page.role ?? 'object',
       boardId: page.id.startsWith('board:') ? Number(page.id.split(':')[1]) : undefined,
     }));
@@ -418,10 +420,9 @@ export default function BoardPage() {
       return cell.action === 'back' ? NAV_ICONS.back : NAV_ICONS.next;
     }
     if (cell.kind === 'folder') {
-      const folder = CORE_FOLDERS[cell.folderId ?? ''];
-      if (folder?.icon) return folder.icon;
-      const first = folder?.words[0];
-      return first ? (pictures[first.label.toLowerCase()] ?? NAV_ICONS.folder) : NAV_ICONS.folder;
+      // Every core folder names itself (lib/core-board.ts). NAV_ICONS.folder is
+      // only reachable if a cell points at a folder id that no longer exists.
+      return CORE_FOLDERS[cell.folderId ?? '']?.icon ?? NAV_ICONS.folder;
     }
     return pictures[cell.label.toLowerCase()] ?? '';
   };
@@ -618,7 +619,7 @@ export default function BoardPage() {
                 <Tile
                   key={page.id}
                   label={page.title}
-                  imageUrl={page.tiles[0]?.imageUrl ?? ''}
+                  imageUrl={page.icon}
                   variant="folder"
                   role={page.role}
                   iconScale={layout.iconScale}

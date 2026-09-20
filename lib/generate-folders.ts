@@ -3,6 +3,7 @@ import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
 import { eq } from 'drizzle-orm';
 import { db, schema } from './db';
 import { contextKey, describeContext, type MomentContext } from './context';
+import { arasaacPicture } from './core-words';
 
 /**
  * Works out what belongs in the four folders for the moment the board is in.
@@ -35,6 +36,25 @@ export const FOLDER_LABELS: Record<FolderId, string> = {
   actions: 'doing',
   things: 'things',
   describing: 'describing',
+};
+
+/**
+ * The picture on each context folder's button.
+ *
+ * Fixed, deliberately. What is INSIDE these four folders is refilled every time
+ * the context changes, and the button used to wear the first word's picture, so
+ * the same folder in the same place showed a different picture at a restaurant
+ * than at the park. These four are the one part of the strip that never moves;
+ * looking different every hour is the opposite of what that is for.
+ *
+ * The same pictograms the matching core folders use, so `doing` and Actions are
+ * one idea with one picture.
+ */
+export const FOLDER_ICONS: Record<FolderId, string> = {
+  people: arasaacPicture(7116),
+  actions: arasaacPicture(32067),
+  things: arasaacPicture(11318),
+  describing: arasaacPicture(32584),
 };
 
 /**

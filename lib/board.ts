@@ -7,6 +7,7 @@ import { describeContext, type MomentContext } from './context';
 import {
   ALWAYS_PEOPLE,
   FOLDER_IDS,
+  FOLDER_ICONS,
   FOLDER_LABELS,
   generateFolders,
   type FolderId,
@@ -54,11 +55,13 @@ export interface BoardPage {
   title: string;
   tiles: Tile[];
   /**
-   * The folder tile is coloured like any other word of this kind, so a folder is
-   * not a different-looking object on the board. The only thing marking it as a
-   * folder is a small tab on its top edge.
+   * The folder tile is coloured like any other word of this kind, so a folder
+   * sits in the same colour block as the words it extends. Its shape is what
+   * marks it as a folder.
    */
   role: WordRole;
+  /** Names the folder, and does not change when its words are refilled. */
+  icon: string;
 }
 
 /**
@@ -236,6 +239,7 @@ export async function assembleMainBoard(
       title: FOLDER_LABELS[folderId],
       tiles,
       role,
+      icon: FOLDER_ICONS[folderId],
     });
   }
 

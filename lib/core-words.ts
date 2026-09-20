@@ -181,6 +181,18 @@ export const NAV_ICONS = {
   ].join('')),
 } as const;
 
+/**
+ * An ARASAAC pictogram by id, on the CDN.
+ *
+ * Used for the pictures that are CHOSEN rather than searched: a folder's icon
+ * has to be the same picture every time, because a folder is found by its look
+ * before its name is read. A search would re-pick it whenever the library or
+ * the ranking changed, and move the ground under someone who navigates by
+ * memory.
+ */
+export const arasaacPicture = (id: number) =>
+  `https://static.arasaac.org/pictograms/${id}/${id}_300.png`;
+
 export const CORE_TERMS = new Set(Object.keys(BUILT_IN_PICTURES));
 
 export type TimeBucket = 'morning' | 'afternoon' | 'evening' | 'night';

@@ -1,4 +1,4 @@
-import type { WordRole } from './core-words';
+import { arasaacPicture, type WordRole } from './core-words';
 
 /**
  * The fixed core board: four pages of seventeen words, inside a seven by three
@@ -192,15 +192,24 @@ export interface CoreFolder {
   role: WordRole;
   words: CoreCell[];
   /**
-   * The picture on the folder button. Without one the folder borrows its first
-   * word's picture, which is fine for People or Food but misleading for the
-   * abstract folders: Places would show a house, and a house is one place.
+   * The picture on the folder button, naming the folder rather than anything
+   * inside it.
+   *
+   * Every folder sets one. Borrowing the first word's picture made the button
+   * say the wrong thing - Places showed a house, and a house is one place, not
+   * places - and when that word had no picture yet the button fell back to a
+   * drawing of a folder, which tells a communicator only what they can already
+   * see from its shape.
+   *
+   * ARASAAC's `categorization` pictograms are used wherever one exists, because
+   * they are drawn for exactly this job: several things together, standing for
+   * the group instead of for one member of it.
    */
-  icon?: string;
+  icon: string;
 }
 
 /** A pictogram by id, from the same library as everything else. */
-const picture = (id: number) => `https://static.arasaac.org/pictograms/${id}/${id}_300.png`;
+const picture = arasaacPicture;
 
 const words = (role: WordRole, ...labels: string[]): CoreCell[] =>
   labels.map((label) => w(label, role));
@@ -212,6 +221,8 @@ const words = (role: WordRole, ...labels: string[]): CoreCell[] =>
  */
 export const CORE_FOLDERS: Record<string, CoreFolder> = {
   people: {
+    // A group, not one person.
+    icon: picture(7116),
     name: 'People',
     role: 'pronoun',
     words: words(
@@ -232,6 +243,7 @@ export const CORE_FOLDERS: Record<string, CoreFolder> = {
     ),
   },
   actions: {
+    icon: picture(32067),
     name: 'Actions',
     role: 'verb',
     words: words(
@@ -252,6 +264,7 @@ export const CORE_FOLDERS: Record<string, CoreFolder> = {
     ),
   },
   questions: {
+    icon: picture(7217),
     name: 'Questions',
     role: 'question',
     words: words(
@@ -272,6 +285,7 @@ export const CORE_FOLDERS: Record<string, CoreFolder> = {
     ),
   },
   describe: {
+    icon: picture(32584),
     name: 'Describe',
     role: 'adjective',
     words: words(
@@ -357,6 +371,7 @@ export const CORE_FOLDERS: Record<string, CoreFolder> = {
     ),
   },
   little: {
+    icon: picture(9837),
     name: 'Little words',
     role: 'preposition',
     words: words(
@@ -377,6 +392,8 @@ export const CORE_FOLDERS: Record<string, CoreFolder> = {
     ),
   },
   chat: {
+    // Two people talking, rather than one person speaking.
+    icon: picture(23402),
     name: 'Chat',
     role: 'preposition',
     words: words(
@@ -397,6 +414,7 @@ export const CORE_FOLDERS: Record<string, CoreFolder> = {
     ),
   },
   food: {
+    icon: picture(4610),
     name: 'Food',
     role: 'noun',
     words: words(
@@ -417,6 +435,7 @@ export const CORE_FOLDERS: Record<string, CoreFolder> = {
     ),
   },
   emotions: {
+    icon: picture(11476),
     name: 'Emotions',
     role: 'adjective',
     words: words(
@@ -437,6 +456,7 @@ export const CORE_FOLDERS: Record<string, CoreFolder> = {
     ),
   },
   time: {
+    icon: picture(22631),
     name: 'Time',
     role: 'adjective',
     words: words(
