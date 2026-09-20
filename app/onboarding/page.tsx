@@ -19,6 +19,9 @@ import {
   type VisionCategory,
 } from '@/lib/sizing';
 import { speak, unlockAudio } from '@/lib/speech';
+import { COLOR_VISION_OPTIONS, type ColorVisionCategory } from '@/lib/color-vision';
+import { OptionGroup, OptionRow, sliderFill } from '@/components/ui/option-list';
+import { PaletteDots } from '@/components/ui/palette-dots';
 
 /**
  * Setup, run once by the caregiver. Everything here stays changeable afterwards
@@ -47,6 +50,7 @@ type Step =
   | 'profile_nationality'
   | 'profile_relationship'
   | 'vision'
+  | 'color_vision'
   | 'tap'
   | 'routine'
   | 'voice'
@@ -60,6 +64,7 @@ const STEP_ORDER: Step[] = [
   'profile_nationality',
   'profile_relationship',
   'vision',
+  'color_vision',
   'routine',
   'tap',
   'voice',
@@ -144,6 +149,8 @@ const STEP_EXPRESSION: Record<Step, GlyphExpression> = {
   profile_relationship: 'open',
   // The questions that ask for a judgement rather than a fact.
   vision: 'curious',
+  // Plain attention: three curious faces in a row would read as fidgeting.
+  color_vision: 'open',
   routine: 'curious',
   // The step that is a game.
   tap: 'wink',
@@ -317,78 +324,6 @@ function ChevronLeft() {
   );
 }
 
-/** iOS sliders fill the track up to the handle. Painted as a gradient sized to
- * the 4px track so the fill sits on the track, not behind the whole control. */
-function sliderFill(value: number, min: number, max: number): React.CSSProperties {
-  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
-  return {
-    backgroundImage: `linear-gradient(to right, var(--focus) 0 ${pct}%, var(--line) ${pct}% 100%)`,
-    backgroundSize: '100% 4px',
-    backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
-  };
-}
-
-function CheckMark() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width="22"
-      height="22"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="shrink-0"
-      style={{ color: 'var(--focus)' }}
-    >
-      <path d="m5 13 4.5 4.5L19 7" />
-    </svg>
-  );
-}
-
-/** One rounded card holding the whole set of choices, hairline-separated. */
-function OptionGroup({ children }: { children: React.ReactNode }) {
-  return <div className="option-group">{children}</div>;
-}
-
-/**
- * A row in that card. Selection reads as a checkmark and a weight change, not
- * a heavy outline, so it still carries under the CVI theme where the tint
- * washes out to nothing.
- */
-function OptionRow({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className="option-row flex min-h-[58px] w-full items-center gap-3 px-4 py-2.5 text-left"
-      style={{ background: selected ? 'var(--tint-soft)' : 'transparent' }}
-    >
-      <span className="min-w-0 flex-1">
-        <span
-          className="block text-[17px] leading-tight"
-          style={{ fontWeight: selected ? 600 : 400 }}
-        >
-          {label}
-        </span>
-      </span>
-      {selected ? <CheckMark /> : null}
-    </button>
-  );
-}
-
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('intro');
@@ -404,6 +339,9 @@ export default function OnboardingPage() {
 
   // Vision: no pre-selection. Continue stays disabled until the caregiver picks one.
   const [vision, setVision] = useState<VisionCategory | null>(null);
+  // Colour vision is its own answer. It picks the palette and nothing else, so
+  // it is deliberately not folded into the eyesight question above it.
+  const [colorVision, setColorVision] = useState<ColorVisionCategory | null>(null);
   const [routine, setRoutine] = useState<string | null>(null);
 
   // Tap calibration
@@ -847,7 +785,7 @@ export default function OnboardingPage() {
               disabled={saving || !vision}
               onClick={() => {
                 if (!vision) return;
-                void saveAndContinue({ vision }, 'routine');
+                void saveAndContinue({ vision }, 'color_vision');
               }}
             >
               Continue
@@ -861,6 +799,57 @@ export default function OnboardingPage() {
                 label={option.label}
                 selected={vision === option.value}
                 onClick={() => setVision(option.value)}
+              />
+            ))}
+          </OptionGroup>
+        </StepLayout>
+      ) : null}
+
+      {/* Asked separately from eyesight, because the two answers change
+          different things. Eyesight changes SIZE; this changes only which
+          colours the buttons are drawn in. Someone who confuses red and green
+          usually has ordinary acuity and does not want bigger buttons. */}
+      {step === 'color_vision' ? (
+        <StepLayout
+          title={`How does ${askedPossessive} colour vision work?`}
+          guide={
+            <Guide>
+              <p>
+                Buttons are coloured by word type, the standard AAC colour key: people are yellow,
+                actions are green, things are orange, and so on.
+              </p>
+              <p>
+                If some of those colours are hard to tell apart, a different set is used that
+                keeps them separate. The dots beside each answer show the set it would use.
+              </p>
+              <p>
+                Nothing is lost either way. Every button always carries its word, and the
+                same-coloured buttons always sit together.
+              </p>
+            </Guide>
+          }
+          action={
+            <Button
+              size="xl"
+              className="w-full"
+              disabled={saving || !colorVision}
+              onClick={() => {
+                if (!colorVision) return;
+                void saveAndContinue({ colorVision }, 'routine');
+              }}
+            >
+              Continue
+            </Button>
+          }
+        >
+          <OptionGroup>
+            {COLOR_VISION_OPTIONS.map((option) => (
+              <OptionRow
+                key={option.value}
+                label={option.label}
+                accessory={<PaletteDots value={option.value} />}
+                selected={colorVision === option.value}
+                onClick={() => setColorVision(option.value)}
               />
             ))}
           </OptionGroup>

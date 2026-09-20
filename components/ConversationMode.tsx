@@ -522,7 +522,7 @@ export function ConversationMode({
           minHeight: 76,
           padding: '10px 8px',
           borderRadius: 12,
-          border: `2px solid ${isSpoken ? '#0e767c' : c.border}`,
+          border: `2px solid ${isSpoken ? 'var(--focus)' : c.border}`,
           background: c.bg,
           color: c.fg,
           fontWeight: 700,
@@ -574,7 +574,7 @@ export function ConversationMode({
             minHeight: 52,
             borderRadius: 12,
             border: 'none',
-            background: on ? '#c4402f' : '#0e767c',
+            background: on ? '#c4402f' : 'var(--focus)',
             color: '#fff',
             fontWeight: 800,
             fontSize: 16,
@@ -593,7 +593,7 @@ export function ConversationMode({
         <p
           className="text-sm font-semibold"
           role="status"
-          style={{ color: speaking ? '#c4402f' : settled ? '#1d5b2c' : '#0e767c' }}
+          style={{ color: speaking ? '#c4402f' : settled ? '#1d5b2c' : 'var(--focus)' }}
         >
           <span aria-hidden="true">●</span> {status()}
         </p>
@@ -602,7 +602,7 @@ export function ConversationMode({
       {heard ? (
         <div
           className="rounded-[10px] border-2 p-3"
-          style={{ borderColor: settled ? '#cfcfc4' : '#0e767c', background: '#fff' }}
+          style={{ borderColor: settled ? 'var(--line)' : 'var(--focus)', background: 'var(--card)' }}
         >
           <p className="sheet__label" style={{ margin: 0 }}>
             They said

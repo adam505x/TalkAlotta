@@ -82,9 +82,9 @@ export function ScenarioSheet({
               style={{
                 minHeight: 46,
                 borderRadius: 10,
-                border: `2px solid ${mode === value ? '#0e767c' : '#cfcfc4'}`,
-                background: mode === value ? '#eaf3f3' : '#fff',
-                color: mode === value ? '#0e767c' : '#6c727b',
+                border: `2px solid ${mode === value ? 'var(--focus)' : 'var(--line)'}`,
+                background: mode === value ? 'var(--tint-soft)' : 'var(--card)',
+                color: mode === value ? 'var(--focus)' : 'var(--ink-soft)',
                 fontWeight: 800,
                 fontSize: 14,
                 cursor: 'pointer',
@@ -143,7 +143,7 @@ export function ScenarioSheet({
             </div>
 
             {busy ? (
-              <p className="text-sm font-semibold" style={{ color: '#6c727b' }}>
+              <p className="text-sm font-semibold" style={{ color: 'var(--ink-soft)' }}>
                 Filling the folders for that...
               </p>
             ) : null}
@@ -160,7 +160,7 @@ export function ScenarioSheet({
             {current ? (
               <div
                 className="flex flex-wrap items-center gap-3 rounded-[10px] border-2 p-3"
-                style={{ borderColor: '#cfcfc4', background: '#fff' }}
+                style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
               >
                 <span className="flex-1 text-sm font-bold">Right now: {current}</span>
                 <button type="button" className="chip" onClick={onClear}>

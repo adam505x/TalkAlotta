@@ -145,7 +145,7 @@ export function PictureSheet({
           <button
             type="submit"
             className="min-h-[52px] rounded-[10px] px-5 font-bold"
-            style={{ background: 'var(--teal)', color: 'var(--teal-ink)' }}
+            style={{ background: 'var(--focus)', color: 'var(--focus-ink)' }}
           >
             Search
           </button>

@@ -58,6 +58,33 @@ function applyGain(): void {
   gainNode.gain.value = pct * GAIN_AT_FULL;
 }
 
+/**
+ * Tell iOS this page plays media, not sound effects.
+ *
+ * WebKit picks an audio session category from what a page plays, and the
+ * default one is silenced by the Ring/Silent switch and follows the ringer
+ * volume rather than the media volume. For a board whose entire purpose is to
+ * speak, that default is wrong: an iPad on silent would simply not talk.
+ *
+ * Safari 16.4 and later let a page say so outright. Older iPads have no such
+ * API, which is why the element is also kept OFF the Web Audio graph below
+ * unless something actually needs it.
+ */
+function claimPlaybackSession(): void {
+  if (typeof navigator === 'undefined') return;
+  const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+  if (!session) return;
+  try {
+    session.type = 'playback';
+  } catch {
+    /* Not settable on this browser. */
+  }
+}
+
+/**
+ * Build the Web Audio graph. Only called when the volume is actually turned
+ * down — see the note on setSpeechVolume.
+ */
 function ensureGain(): void {
   if (gainNode || typeof window === 'undefined') return;
   try {
@@ -86,9 +113,35 @@ async function resumeAudioCtx(): Promise<void> {
   }
 }
 
-/** Update playback loudness (0–100). Safe to call before audio is unlocked. */
+/**
+ * Update playback loudness (0-100). Safe to call before audio is unlocked.
+ *
+ * THIS is the only thing that needs Web Audio, and it is why the graph is built
+ * here rather than on the first touch.
+ *
+ * iOS ignores HTMLMediaElement.volume outright — it is read-only there, because
+ * loudness belongs to the hardware buttons — so a caregiver volume slider can
+ * only be honoured by passing the audio through a GainNode. But the moment
+ * createMediaElementSource is called, playback leaves the media channel and
+ * becomes Web Audio output, which on iOS is silenced by the Ring/Silent switch
+ * and follows the ringer volume instead of the media volume. An iPad on silent
+ * then says nothing at all.
+ *
+ * So the trade is made only when it buys something. At full volume the gain
+ * node would multiply by exactly 1 and change nothing audible, so the element
+ * is left alone and plays on the media channel like any other audio on the
+ * device. Turn the volume down and the graph appears, which is the one case
+ * where it is worth having.
+ */
 export function setSpeechVolume(percent: number): void {
   volumePercent = Math.max(0, Math.min(100, Math.round(percent)));
+  if (volumePercent < 100) {
+    ensureGain();
+    // Dragging the slider is itself a user gesture, and a context created
+    // outside one starts suspended. Resuming here means it is running before
+    // the next press needs it, which is well after any gesture of its own.
+    void resumeAudioCtx();
+  }
   applyGain();
 }
 
@@ -102,8 +155,12 @@ export function getSpeechVolume(): number {
 export function unlockAudio(): void {
   if (unlocked) return;
   unlocked = true;
+  claimPlaybackSession();
   const el = element();
-  ensureGain();
+  // Deliberately NOT ensureGain(). See setSpeechVolume: routing the element
+  // through Web Audio is what costs an iPad its sound, so it is not done until
+  // there is a reason for it.
+  if (volumePercent < 100) ensureGain();
   try {
     el.src = SILENCE;
     const played = el.play();
@@ -161,7 +218,7 @@ async function logUtterance(text: string, kind: 'word' | 'sentence', boardId?: n
 }
 
 async function playClip(el: HTMLAudioElement, url: string): Promise<void> {
-  ensureGain();
+  if (volumePercent < 100) ensureGain();
   await resumeAudioCtx();
   el.pause();
   el.src = url;

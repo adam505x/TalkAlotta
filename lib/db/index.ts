@@ -44,6 +44,7 @@ function createTables(sqlite: Database.Database) {
       nationality TEXT,
       caregiver_relationship TEXT,
       vision TEXT NOT NULL DEFAULT 'unknown',
+      color_vision TEXT NOT NULL DEFAULT 'unknown',
       tap_error_px INTEGER,
       grid_index INTEGER NOT NULL DEFAULT 2,
       button_scale_pct INTEGER,
@@ -214,6 +215,7 @@ function createTables(sqlite: Database.Database) {
   addColumn(sqlite, 'profile', 'button_scale_pct', 'INTEGER');
   addColumn(sqlite, 'folder_words', 'location', 'TEXT');
   addColumn(sqlite, 'profile', 'speech_volume', 'INTEGER NOT NULL DEFAULT 100');
+  addColumn(sqlite, 'profile', 'color_vision', "TEXT NOT NULL DEFAULT 'unknown'");
 
   // The profile row always exists so reads never have to special-case null.
   sqlite.exec('INSERT OR IGNORE INTO profile (id) VALUES (1)');

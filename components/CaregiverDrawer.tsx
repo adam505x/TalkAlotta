@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { HoldButton } from '@/components/HoldButton';
 
 /**
@@ -71,7 +70,7 @@ const ITEMS: { id: CaregiverAction; label: string; blurb: string }[] = [
   { id: 'dashboard', label: 'Dashboard', blurb: 'How the board is being used' },
   { id: 'saved-boards', label: 'Saved boards', blurb: 'Situations already described' },
   { id: 'add-image', label: 'Add image', blurb: 'Upload your own photo for a word' },
-  { id: 'settings', label: 'Settings', blurb: 'Size, spacing, eyesight, voice' },
+  { id: 'settings', label: 'Settings', blurb: 'Size, eyesight, colour, voice' },
 ];
 
 export function CaregiverDrawer({
@@ -83,8 +82,6 @@ export function CaregiverDrawer({
   onAction: (action: CaregiverAction) => void;
   editMode: boolean;
 }) {
-  const router = useRouter();
-
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -104,13 +101,13 @@ export function CaregiverDrawer({
             onClick={onClose}
             aria-label="Close caregiver mode"
             className="min-h-[44px] px-2 text-xl font-bold"
-            style={{ color: '#6c727b' }}
+            style={{ color: 'var(--ink-soft)' }}
           >
             &#10005;
           </button>
         </div>
 
-        <p className="text-xs font-semibold" style={{ color: '#6c727b' }}>
+        <p className="text-xs font-semibold" style={{ color: 'var(--ink-soft)' }}>
           The board stays visible, so you can make changes while looking at it.
         </p>
 
@@ -122,20 +119,20 @@ export function CaregiverDrawer({
         */}
         <section
           className="flex flex-col gap-2 rounded-[10px] border-2 p-3"
-          style={{ borderColor: '#cfcfc4', background: '#fff' }}
+          style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
         >
           <div className="flex items-center justify-between gap-3">
             <span className="text-base font-bold">Edit mode</span>
             <span className={`pill${editMode ? ' pill--on' : ''}`}>{editMode ? 'On' : 'Off'}</span>
           </div>
-          <p className="text-xs font-semibold" style={{ color: '#6c727b' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--ink-soft)' }}>
             Change a picture, add a button or folder, or remove one.
           </p>
           {editMode ? (
             <button
               type="button"
               className="min-h-[52px] rounded-[9px] border-2 font-bold"
-              style={{ borderColor: '#cfcfc4', background: '#fff', color: 'var(--ink)' }}
+              style={{ borderColor: 'var(--line)', background: 'var(--card)', color: 'var(--ink)' }}
               onClick={() => onAction('edit-boards')}
             >
               Turn editing off
@@ -151,18 +148,12 @@ export function CaregiverDrawer({
               key={item.id}
               type="button"
               className="drawer-item"
-              onClick={() => {
-                if (item.id === 'settings') {
-                  router.push('/settings');
-                  return;
-                }
-                onAction(item.id);
-              }}
+              onClick={() => onAction(item.id)}
             >
-              <span style={{ color: 'var(--teal)' }}>{ICONS[item.id]}</span>
+              <span style={{ color: 'var(--focus)' }}>{ICONS[item.id]}</span>
               <span className="flex min-w-0 flex-col">
                 <span className="text-base font-bold leading-tight">{item.label}</span>
-                <span className="text-xs font-semibold leading-snug" style={{ color: '#6c727b' }}>
+                <span className="text-xs font-semibold leading-snug" style={{ color: 'var(--ink-soft)' }}>
                   {item.blurb}
                 </span>
               </span>

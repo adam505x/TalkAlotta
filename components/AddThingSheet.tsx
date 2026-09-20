@@ -212,7 +212,7 @@ export function AddThingSheet({
             <button
               type="button"
               className="min-h-[52px] rounded-[10px] px-4 font-bold disabled:opacity-50"
-              style={{ background: 'var(--teal)', color: 'var(--teal-ink)' }}
+              style={{ background: 'var(--focus)', color: 'var(--focus-ink)' }}
               disabled={!label.trim() || searching}
               onClick={() => void findPictures(label)}
             >
@@ -260,7 +260,7 @@ export function AddThingSheet({
                         className="flex w-full flex-col items-center gap-1 rounded-[10px] p-1.5"
                         style={{
                           border: `3px solid ${
-                            chosen === candidate.imageUrl ? 'var(--teal)' : '#cfcfc4'
+                            chosen === candidate.imageUrl ? 'var(--focus)' : 'var(--line)'
                           }`,
                           background: '#fff',
                         }}
@@ -305,7 +305,7 @@ export function AddThingSheet({
           <button
             type="submit"
             className="min-h-[52px] rounded-[10px] px-5 font-bold disabled:opacity-50"
-            style={{ background: 'var(--teal)', color: 'var(--teal-ink)' }}
+            style={{ background: 'var(--focus)', color: 'var(--focus-ink)' }}
             disabled={busy || !label.trim() || (!isFolder && !folderId)}
           >
             {busy ? 'Adding...' : 'Add it'}
