@@ -7,7 +7,7 @@ import { Sheet } from '@/components/Sheet';
 import { ScenarioSheet } from '@/components/ScenarioSheet';
 import { PictureSheet, type Candidate } from '@/components/PictureSheet';
 import { CaregiverDrawer, type CaregiverAction } from '@/components/CaregiverDrawer';
-import { AddThingSheet, type AddRequest } from '@/components/AddThingSheet';
+import { AddThingSheet, type AddFolderChoice, type AddRequest } from '@/components/AddThingSheet';
 import { DashboardSheet } from '@/components/DashboardSheet';
 import { setSpeechVolume, speak, stopSpeaking, unlockAudio } from '@/lib/speech';
 import { analyticsSessionId, track } from '@/lib/track';
@@ -17,6 +17,7 @@ import {
   CORE_COLUMNS,
   CORE_FOLDERS,
   CORE_PAGES,
+  folderPageCount,
   layOutFolder,
   layOutPage,
   type CoreCell,
@@ -52,6 +53,7 @@ interface BoardPayload {
   };
   contextLabel: string;
   generated: boolean;
+  coreAdded?: Record<string, ApiTile[]>;
   recommended: string[];
   layout: {
     grid: { cols: number; rows: number };
@@ -64,14 +66,6 @@ interface BoardPayload {
   voice: { voiceId: string; label: string };
   speechVolume?: number;
   onboarded: boolean;
-}
-
-interface FolderEntry {
-  id: string;
-  title: string;
-  cover: string;
-  role: WordRole;
-  boardId?: number;
 }
 
 /**
@@ -161,9 +155,18 @@ function useButtonGap(scale: number) {
 export default function BoardPage() {
   const [data, setData] = useState<BoardPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [openFolder, setOpenFolder] = useState<string | null>(null);
+  // Two independent folders, not one. A core folder lives in the three rows and
+  // a dynamic folder lives in the strip underneath, and they are different
+  // things that happen to share names: the core "doing" folder is a fixed
+  // vocabulary, the dynamic one is whatever this moment calls for. Holding both
+  // in a single variable meant opening either closed the other, so the two
+  // halves of the board could never be used together.
+  const [openCore, setOpenCore] = useState<string | null>(null);
+  const [openDynamic, setOpenDynamic] = useState<string | null>(null);
   /** Which of the three fixed pages is showing, when no folder is open. */
   const [corePage, setCorePage] = useState(0);
+  /** Which page of an open folder is showing, when it has overflowed. */
+  const [folderPage, setFolderPage] = useState(0);
   const [sentence, setSentence] = useState<SentenceWord[]>([]);
   const [speaking, setSpeaking] = useState(false);
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
@@ -204,7 +207,7 @@ export default function BoardPage() {
       if (demo.location) params.set('location', demo.location);
       if (demo.weather) params.set('weather', demo.weather);
       if (situation) params.set('situation', situation);
-      if (openFolder?.startsWith('core:')) params.set('folder', openFolder.slice(5));
+      if (openCore) params.set('folder', openCore.slice(5));
 
       const res = await fetch(`/api/boards?${params.toString()}`);
       const payload = (await res.json()) as BoardPayload & { error?: string };
@@ -214,7 +217,7 @@ export default function BoardPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the board.');
     }
-  }, [demo, openFolder, situation]);
+  }, [demo, openCore, situation]);
 
   useEffect(() => {
     void load();
@@ -259,19 +262,24 @@ export default function BoardPage() {
   const { ref: gridRef, gap: measuredGap } = useButtonGap(layout?.buttonScale ?? 0.9);
 
   const currentPage = useMemo(
-    () => (data && openFolder ? (data.pages.find((p) => p.id === openFolder) ?? null) : null),
-    [data, openFolder],
+    () => (data && openDynamic ? (data.pages.find((p) => p.id === openDynamic) ?? null) : null),
+    [data, openDynamic],
   );
 
-  const folders = useMemo<FolderEntry[]>(() => {
-    if (!data) return [];
-    return data.pages.map((page) => ({
+  const addFolders = useMemo<AddFolderChoice[]>(() => {
+    const always: AddFolderChoice[] = Object.entries(CORE_FOLDERS).map(([id, folder]) => ({
+      id: `core:${id}`,
+      title: folder.name,
+      role: folder.role,
+      group: 'always',
+    }));
+    const moment: AddFolderChoice[] = (data?.pages ?? []).map((page) => ({
       id: page.id,
       title: page.title,
-      cover: page.icon,
-      role: page.role ?? 'object',
-      boardId: page.id.startsWith('board:') ? Number(page.id.split(':')[1]) : undefined,
+      role: page.role,
+      group: 'moment',
     }));
+    return [...always, ...moment];
   }, [data]);
 
   /**
@@ -294,8 +302,10 @@ export default function BoardPage() {
     location: demo.location ?? data?.context.location ?? null,
     weather: demo.weather ?? data?.context.weather ?? null,
     situation,
-    folderId: openFolder,
-    pageId: openFolder ?? `page:${corePage}`,
+    // The dynamic folder is the more specific of the two, so it is what names
+    // the moment when both happen to be open.
+    folderId: openDynamic ?? openCore,
+    pageId: openDynamic ?? openCore ?? `page:${corePage}`,
   };
 
   const loadStats = useCallback(async (nextRange: DashboardRange) => {
@@ -312,26 +322,39 @@ export default function BoardPage() {
     void loadStats(statsRange);
   }, [overlay.kind, statsRange, loadStats]);
 
-  const prevFolder = useRef<string | null>(null);
+  // Opens and closes are tracked per half of the board rather than for "the"
+  // folder, because there can now be two open at once and closing one must not
+  // be recorded as closing both.
+  const prevCore = useRef<string | null>(null);
+  const prevDynamic = useRef<string | null>(null);
   useEffect(() => {
-    const prev = prevFolder.current;
-    if (prev === openFolder) return;
     const ctx = momentRef.current;
-    if (prev) {
-      track({ type: 'folder_close', source: 'board', ...ctx, folderId: prev });
+    for (const [seen, current] of [
+      [prevCore, openCore],
+      [prevDynamic, openDynamic],
+    ] as const) {
+      const prev = seen.current;
+      if (prev === current) continue;
+      if (prev) track({ type: 'folder_close', source: 'board', ...ctx, folderId: prev });
+      if (current) {
+        track({
+          type: 'folder_open',
+          label: current,
+          source: 'board',
+          ...ctx,
+          folderId: current,
+          pageId: current,
+        });
+      }
+      seen.current = current;
     }
-    if (openFolder) {
-      track({
-        type: 'folder_open',
-        label: openFolder,
-        source: 'board',
-        ...ctx,
-        folderId: openFolder,
-        pageId: openFolder,
-      });
-    }
-    prevFolder.current = openFolder;
-  }, [openFolder]);
+  }, [openCore, openDynamic]);
+
+  // Paging belongs to the core folders alone. A dynamic folder holds five words
+  // and never turns a page.
+  useEffect(() => {
+    setFolderPage(0);
+  }, [openCore]);
 
   const say = useCallback(
     async (
@@ -477,6 +500,26 @@ export default function BoardPage() {
   );
 
   /**
+   * Opens a folder in whichever half of the board it belongs to, leaving the
+   * other half exactly as it was. Passing null closes both, which is what the
+   * callers that reset the whole board after a change are asking for.
+   */
+  const goToFolder = useCallback((id: string | null) => {
+    if (id === null) {
+      setOpenCore(null);
+      setOpenDynamic(null);
+      setFolderPage(0);
+      return;
+    }
+    if (id.startsWith('core:')) {
+      setOpenCore(id);
+      setFolderPage(0);
+      return;
+    }
+    setOpenDynamic(id);
+  }, []);
+
+  /**
    * Add a button to the open folder, or create a new folder on the board.
    * A word with no usable picture is refused rather than added blank.
    */
@@ -489,7 +532,7 @@ export default function BoardPage() {
           request.kind === 'folder'
             ? { create: 'folder', name: request.label }
             : {
-                folderId: openFolder,
+                folderId: request.folderId ?? openDynamic ?? openCore,
                 term: request.label,
                 role: request.role,
                 imageUrl: request.imageUrl,
@@ -508,11 +551,14 @@ export default function BoardPage() {
 
         setOverlay({ kind: 'none' });
         await load();
-        // Drop straight into a folder that was just made, so it is obvious where
-        // it went and what to put in it.
+        // Drop straight into the folder it went into, so it is obvious where it
+        // landed rather than vanishing into a closed page.
         if (request.kind === 'folder' && payload.folderId) {
-          setOpenFolder(payload.folderId);
-      setCorePage(0);
+          goToFolder(payload.folderId);
+          setCorePage(0);
+        } else if (request.kind === 'button' && request.folderId) {
+          goToFolder(request.folderId);
+          setCorePage(0);
         }
       } catch (e) {
         setActionError(e instanceof Error ? e.message : 'Could not add that.');
@@ -520,7 +566,7 @@ export default function BoardPage() {
         setBusy(false);
       }
     },
-    [demo.location, load, openFolder],
+    [demo.location, goToFolder, load, openCore, openDynamic],
   );
 
   /**
@@ -541,7 +587,7 @@ export default function BoardPage() {
           situation: next,
         });
       }
-      setOpenFolder(null);
+      goToFolder(null);
       setCorePage(0);
       setOverlay({ kind: 'none' });
       setBusy(false);
@@ -559,7 +605,7 @@ export default function BoardPage() {
         });
         const body = (await res.json()) as { error?: string };
         if (!res.ok) throw new Error(body.error ?? 'Could not remove that folder.');
-        setOpenFolder(null);
+        goToFolder(null);
       setCorePage(0);
         setOverlay({ kind: 'none' });
         await load();
@@ -575,7 +621,7 @@ export default function BoardPage() {
   const deleteBoard = useCallback(
     async (boardId: number) => {
       await fetch(`/api/boards?id=${boardId}`, { method: 'DELETE' });
-      setOpenFolder(null);
+      goToFolder(null);
       void load();
     },
     [load],
@@ -625,18 +671,42 @@ export default function BoardPage() {
    * plus that folder's words when a core folder is open. A dynamic folder never
    * touches these rows; it only swaps the strip underneath.
    */
-  const coreFolderId = openFolder?.startsWith('core:') ? openFolder.slice(5) : null;
+  const coreFolderId = openCore ? openCore.slice(5) : null;
   const coreFolder = coreFolderId ? CORE_FOLDERS[coreFolderId] : undefined;
-  const dynamicFolder = openFolder?.startsWith('folder:')
-    ? data.pages.find((p) => p.id === openFolder)
-    : undefined;
+  const dynamicFolder = openDynamic ? data.pages.find((p) => p.id === openDynamic) : undefined;
 
-  const fixedCells = coreFolder ? layOutFolder(coreFolder.words) : layOutPage(corePage);
+  const addedCoreWords = coreFolderId
+    ? (data.coreAdded?.[coreFolderId] ?? []).map(
+        (tile): CoreCell => ({
+          label: tile.label,
+          role: tile.role,
+          kind: 'word',
+        }),
+      )
+    : [];
+  const coreFolderWords = coreFolder ? [...addedCoreWords, ...coreFolder.words] : [];
+  const coreFolderPages = folderPageCount(coreFolderWords.length);
+  const fixedCells = coreFolder
+    ? layOutFolder(coreFolderWords, folderPage)
+    : layOutPage(corePage);
 
   // A dynamic folder's words arrive with their pictures already attached.
   if (dynamicFolder) {
     for (const tile of dynamicFolder.tiles) pictures[tile.label.toLowerCase()] = tile.imageUrl;
   }
+
+  /**
+   * A dynamic folder holds five words and no more, so it never pages.
+   *
+   * Five is what fits beside back in one strip, and a folder whose whole
+   * contents are visible at once is the only kind worth refilling: if a word
+   * could be hiding on a second page of a folder that rewrites itself, nobody
+   * can rely on having seen it, and the entire point of these four is that a
+   * glance tells you what this moment offers. The server caps them at five too;
+   * this is the floor under that.
+   */
+  const DYNAMIC_MAX = CORE_COLUMNS - 2;
+  const stripTiles = (dynamicFolder?.tiles ?? []).slice(0, DYNAMIC_MAX);
 
   // One grid, seven wide, filling the screen. The core rows and the strip
   // underneath share the same columns so their buttons line up exactly.
@@ -658,18 +728,24 @@ export default function BoardPage() {
         });
         return;
       }
-      setOpenFolder(`core:${cell.folderId}`);
+      goToFolder(`core:${cell.folderId}`);
       return;
     }
 
     if (cell.kind === 'action') {
-      // Inside a folder, back comes out of it. On a page it turns back one page,
-      // and paging stops at the ends rather than wrapping.
+      // Inside a folder, back leaves on page one and turns back a page after that.
+      // On the main board it turns back one page, and paging stops at the ends
+      // rather than wrapping.
       if (cell.action === 'back') {
-        if (coreFolder) setOpenFolder(null);
-        else setCorePage((p) => Math.max(0, p - 1));
+        if (coreFolder) {
+          if (folderPage > 0) setFolderPage((p) => p - 1);
+          // Closes the core folder only. A dynamic folder open in the strip
+          // underneath is left exactly where it was.
+          else setOpenCore(null);
+        } else setCorePage((p) => Math.max(0, p - 1));
       } else if (cell.action === 'next') {
-        setCorePage((p) => Math.min(CORE_PAGES.length - 1, p + 1));
+        if (coreFolder) setFolderPage((p) => Math.min(coreFolderPages - 1, p + 1));
+        else setCorePage((p) => Math.min(CORE_PAGES.length - 1, p + 1));
       }
       return;
     }
@@ -686,11 +762,14 @@ export default function BoardPage() {
     );
   };
 
-  /** Back is dead on page one, next on the last page. */
+  /** Back is dead on page one of the main board, next on the last page. */
   const disabledAction = (cell: CoreCell): boolean => {
     if (cell.kind !== 'action') return false;
     if (cell.action === 'back') return !coreFolder && corePage === 0;
-    if (cell.action === 'next') return Boolean(coreFolder) || corePage === CORE_PAGES.length - 1;
+    if (cell.action === 'next') {
+      if (coreFolder) return folderPage >= coreFolderPages - 1;
+      return corePage === CORE_PAGES.length - 1;
+    }
     return false;
   };
 
@@ -788,9 +867,11 @@ export default function BoardPage() {
                 imageUrl={NAV_ICONS.back}
                 role="determiner"
                 iconScale={layout.iconScale}
-                onActivate={() => setOpenFolder(null)}
+                // Closes the strip only. A core folder open in the rows above
+                // stays open, because the two are separate places.
+                onActivate={() => setOpenDynamic(null)}
               />
-              {dynamicFolder.tiles.map((tile, index) => (
+              {stripTiles.map((tile, index) => (
                 <Tile
                   key={`${tile.term}-${index}`}
                   label={tile.label}
@@ -801,6 +882,15 @@ export default function BoardPage() {
                   onActivate={() => void onWordTile(tile, { cellIndex: index + 1 })}
                 />
               ))}
+              {Array.from({
+                length: Math.max(0, DYNAMIC_MAX - stripTiles.length),
+              }).map((_, i) => (
+                <span key={`strip-gap-${i}`} aria-hidden="true" />
+              ))}
+              {/* No next button, ever. The cell is left empty so the strip keeps
+                  the same seven columns as the rows above it and nothing shifts
+                  sideways when a folder opens. */}
+              <span aria-hidden="true" />
             </>
           ) : (
             <>
@@ -829,7 +919,7 @@ export default function BoardPage() {
                       });
                       return;
                     }
-                    setOpenFolder(page.id);
+                    goToFolder(page.id);
                   }}
                 />
               ))}
@@ -851,8 +941,8 @@ export default function BoardPage() {
         busy={busy}
         onChange={(next) => {
           setDemo(next);
-          setOpenFolder(null);
-      setCorePage(0);
+          goToFolder(null);
+          setCorePage(0);
         }}
       />
 
@@ -894,8 +984,10 @@ export default function BoardPage() {
 
       {overlay.kind === 'add' ? (
         <AddThingSheet
-          folderTitle={currentPage?.title ?? null}
-          canAddButton={Boolean(currentPage)}
+          folderTitle={currentPage?.title ?? (coreFolder ? coreFolder.name : null)}
+          folders={addFolders}
+          currentFolderId={openDynamic ?? openCore}
+          canAddButton={addFolders.length > 0}
           busy={busy}
           error={actionError}
           onAdd={(request) => void addThing(request)}
@@ -918,7 +1010,7 @@ export default function BoardPage() {
               type="button"
               className="chip"
               onClick={() => {
-                setOpenFolder(overlay.folderId);
+                goToFolder(overlay.folderId);
       setCorePage(0);
                 setOverlay({ kind: 'none' });
               }}
@@ -961,7 +1053,7 @@ export default function BoardPage() {
                   className="w-full rounded-[10px] border-2 p-3 text-left font-bold"
                   style={{ borderColor: '#cfcfc4', background: '#fff' }}
                   onClick={() => {
-                    setOpenFolder(`core:${id}`);
+                    goToFolder(`core:${id}`);
                     setOverlay({ kind: 'none' });
                   }}
                 >

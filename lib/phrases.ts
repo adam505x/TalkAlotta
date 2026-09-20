@@ -1,5 +1,6 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, inArray } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
+import { folderIdAliases } from './folder-id';
 
 /**
  * Phrases the caregiver pinned from the dashboard.
@@ -13,15 +14,15 @@ export const PHRASES_FOLDER_ID = 'phrases';
 export const PHRASES_PAGE_ID = `folder:${PHRASES_FOLDER_ID}`;
 export const PHRASES_TITLE = 'my phrases';
 
-/** Two rows on the strip is still scannable; past that it is a list. */
-export const PHRASES_CAP = 12;
+/** A few pages on the strip; past that it is a catalogue. */
+export const PHRASES_CAP = 24;
 export const PHRASE_MAX_CHARS = 80;
 
 export function listedPhrases(): string[] {
   return db
     .select({ term: schema.folderWords.term })
     .from(schema.folderWords)
-    .where(eq(schema.folderWords.folderId, PHRASES_FOLDER_ID))
+    .where(inArray(schema.folderWords.folderId, folderIdAliases(PHRASES_FOLDER_ID)))
     .orderBy(asc(schema.folderWords.createdAt), asc(schema.folderWords.id))
     .all()
     .map((row) => row.term);

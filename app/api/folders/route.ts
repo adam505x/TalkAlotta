@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
 import { resolveWord } from '@/lib/board';
 import { recordFeedback } from '@/lib/symbol-search';
 import { recordEvents } from '@/lib/analytics';
+import { canonicalFolderId, folderIdAliases, isPhrasesFolderId } from '@/lib/folder-id';
+import { listedPhrases, PHRASES_CAP } from '@/lib/phrases';
 import type { WordRole } from '@/lib/core-words';
 
 export const runtime = 'nodejs';
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, folderId: `board:${created.id}`, name });
   }
 
-  const folderId = String(body.folderId ?? '').trim();
+  const folderId = canonicalFolderId(String(body.folderId ?? ''));
   const term = String(body.term ?? '')
     .trim()
     .toLowerCase();
@@ -74,6 +76,25 @@ export async function POST(request: Request) {
   }
   if (term.length > 40) {
     return NextResponse.json({ error: 'That word is too long.' }, { status: 400 });
+  }
+
+  if (!folderId.startsWith('board:')) {
+    const alreadyInFolder = db
+      .select({ n: schema.folderWords.id })
+      .from(schema.folderWords)
+      .where(inArray(schema.folderWords.folderId, folderIdAliases(folderId)))
+      .all().length;
+    const cap = isPhrasesFolderId(folderId) ? PHRASES_CAP : 24;
+    if (alreadyInFolder >= cap) {
+      return NextResponse.json(
+        { error: `That folder is full (${cap}). Take one off before adding another.` },
+        { status: 409 },
+      );
+    }
+  }
+
+  if (isPhrasesFolderId(folderId) && listedPhrases().some((row) => row.toLowerCase() === term)) {
+    return NextResponse.json({ error: `"${term}" is already in this folder.` }, { status: 409 });
   }
 
   /**
@@ -149,7 +170,12 @@ export async function POST(request: Request) {
     const already = db
       .select()
       .from(schema.folderWords)
-      .where(and(eq(schema.folderWords.folderId, folderId), eq(schema.folderWords.term, term)))
+      .where(
+        and(
+          inArray(schema.folderWords.folderId, folderIdAliases(folderId)),
+          eq(schema.folderWords.term, term),
+        ),
+      )
       .get();
     if (already) {
       return NextResponse.json({ error: `"${term}" is already in this folder.` }, { status: 409 });
@@ -164,8 +190,13 @@ export async function POST(request: Request) {
     }
 
     // Pinned to where it was added, so it returns there and stays out of the way
-    // elsewhere. No location means it belongs everywhere.
-    const location = body.location ? String(body.location).trim().slice(0, 60) : null;
+    // elsewhere. No location means it belongs everywhere. A phrase is a favourite
+    // sentence, so it is never pinned to one place.
+    const location = isPhrasesFolderId(folderId)
+      ? null
+      : body.location
+        ? String(body.location).trim().slice(0, 60)
+        : null;
     db.insert(schema.folderWords).values({ folderId, term, role, location }).run();
     recordFeedback(term, 'accepted', { id: tile.symbolId, imageUrl: tile.imageUrl });
     recordEvents([
@@ -189,10 +220,11 @@ export async function POST(request: Request) {
  */
 export async function DELETE(request: Request) {
   const url = new URL(request.url);
-  const folderId = (url.searchParams.get('folderId') ?? '').trim();
+  const rawFolderId = (url.searchParams.get('folderId') ?? '').trim();
+  const folderId = canonicalFolderId(rawFolderId);
   const term = (url.searchParams.get('term') ?? '').trim().toLowerCase();
 
-  if (!folderId) {
+  if (!rawFolderId) {
     return NextResponse.json({ error: 'folderId required.' }, { status: 400 });
   }
 
@@ -204,25 +236,30 @@ export async function DELETE(request: Request) {
         .run();
     } else {
       db.delete(schema.folderWords)
-        .where(and(eq(schema.folderWords.folderId, folderId), eq(schema.folderWords.term, term)))
+        .where(
+          and(
+            inArray(schema.folderWords.folderId, folderIdAliases(folderId)),
+            eq(schema.folderWords.term, term),
+          ),
+        )
         .run();
     }
     return NextResponse.json({ ok: true, removed: term });
   }
 
-  if (folderId.startsWith('board:')) {
+  if (rawFolderId.startsWith('board:')) {
     // Created by the caregiver, so removing it really does delete it.
-    const boardId = Number(folderId.split(':')[1]);
+    const boardId = Number(rawFolderId.split(':')[1]);
     if (Number.isFinite(boardId)) {
       db.delete(schema.boardItems).where(eq(schema.boardItems.boardId, boardId)).run();
       db.delete(schema.boards).where(eq(schema.boards.id, boardId)).run();
     }
   } else {
     // Built in, so only hidden. It can be brought back.
-    db.insert(schema.hiddenFolders).values({ folderId }).onConflictDoNothing().run();
+    db.insert(schema.hiddenFolders).values({ folderId: rawFolderId }).onConflictDoNothing().run();
   }
 
-  return NextResponse.json({ ok: true, removed: folderId });
+  return NextResponse.json({ ok: true, removed: rawFolderId });
 }
 
 /** Bring a hidden folder back, and list what is currently hidden. */

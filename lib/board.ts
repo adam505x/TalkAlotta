@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from './db';
 import { builtInPicture, NAV_ICONS, type WordRole } from './core-words';
 import { fixedBoardTerms } from './core-board';
@@ -13,6 +13,7 @@ import {
   type FolderId,
 } from './generate-folders';
 import { listedPhrases, PHRASES_CAP, PHRASES_PAGE_ID, PHRASES_TITLE } from './phrases';
+import { folderIdAliases } from './folder-id';
 
 /**
  * Board assembly.
@@ -159,14 +160,31 @@ export interface AssembledBoard {
   pictures: Record<string, string>;
   /** The four situation folders, then my phrases, which does not change with the moment. */
   pages: BoardPage[];
+  /**
+   * Words a caregiver added to a core folder, keyed by the bare folder id
+   * (`people`, not `core:people`). They sit in front of that folder's built-in
+   * words so a name like Liam is found before the generic list.
+   */
+  coreAdded: Record<string, Tile[]>;
   context: MomentContext;
   contextLabel: string;
   /** False when there is no API key and the words are a generic stand-in. */
   generated: boolean;
 }
 
-/** The most a folder ever shows at once. */
-const FOLDER_CAP = 6;
+/** How many extra words a folder will hold. Overflow goes on the next page. */
+/**
+ * The hard maximum for a dynamic folder.
+ *
+ * Five, because a dynamic folder has no next button and everything in it has to
+ * fit beside back in a single strip. These four are the only folders whose
+ * contents change, and a changing folder is trustworthy only if one glance
+ * takes all of it in: a word hidden on page two of a folder that refills itself
+ * is a word nobody knows is there. Overflow is dropped rather than paged, and
+ * the order words are gathered in below decides what survives - a caregiver's
+ * own words are added first, so they are the ones that keep their places.
+ */
+const DYNAMIC_FOLDER_CAP = 5;
 
 /** The colour each folder's words take, following the Fitzgerald key. */
 const FOLDER_ROLE: Record<FolderId, WordRole> = {
@@ -187,7 +205,7 @@ function learnedWords(folderId: FolderId, location: string | null): { term: stri
   const rows = db
     .select()
     .from(schema.folderWords)
-    .where(eq(schema.folderWords.folderId, folderId))
+    .where(inArray(schema.folderWords.folderId, folderIdAliases(folderId)))
     .all();
 
   const here = (location ?? '').toLowerCase();
@@ -232,9 +250,7 @@ export async function assembleMainBoard(
       chosen.push({ term, role });
     }
 
-    // About five, never more than six. Past that a folder stops being something
-    // you can scan and becomes something you have to read.
-    const tiles = await resolveMany(chosen.slice(0, FOLDER_CAP));
+    const tiles = await resolveMany(chosen.slice(0, DYNAMIC_FOLDER_CAP));
     pages.push({
       id: `folder:${folderId}`,
       title: FOLDER_LABELS[folderId],
@@ -272,7 +288,39 @@ export async function assembleMainBoard(
   );
   for (const r of resolved) pictures[r.term.toLowerCase()] = r.imageUrl;
 
-  return { pictures, pages, context, contextLabel: describeContext(context), generated };
+  const coreAdded = await loadCoreAdded();
+  for (const tiles of Object.values(coreAdded)) {
+    for (const tile of tiles) {
+      pictures[tile.term.toLowerCase()] = tile.imageUrl;
+    }
+  }
+
+  return { pictures, pages, coreAdded, context, contextLabel: describeContext(context), generated };
+}
+
+async function loadCoreAdded(): Promise<Record<string, Tile[]>> {
+  const rows = db
+    .select()
+    .from(schema.folderWords)
+    .all()
+    .filter((row) => row.folderId.startsWith('core:'));
+
+  const out: Record<string, Tile[]> = {};
+  for (const row of rows) {
+    const key = row.folderId.slice('core:'.length);
+    const role = (row.role as WordRole) ?? 'noun';
+    const tile =
+      (await resolveWord(row.term, role)) ??
+      ({
+        term: row.term,
+        label: row.term,
+        role,
+        imageUrl: '',
+        kind: 'word' as const,
+      } satisfies Tile);
+    (out[key] ??= []).push(tile);
+  }
+  return out;
 }
 
 async function assemblePhrasesPage(): Promise<BoardPage> {

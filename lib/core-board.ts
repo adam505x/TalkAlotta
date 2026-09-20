@@ -215,9 +215,10 @@ const words = (role: WordRole, ...labels: string[]): CoreCell[] =>
   labels.map((label) => w(label, role));
 
 /**
- * Thirteen words each: one pinned row, then seven, then six beside the back
- * button. A folder is never more than one screen, so there is nothing to page
- * through and no next button inside one.
+ * Twelve or thirteen words on the first screen: the pinned core row stays put,
+ * then a row of seven, then the cells beside back. Next lives in its usual
+ * corner once a folder has more than will fit, and further words go on the
+ * next page rather than wrapping or being dropped.
  */
 export const CORE_FOLDERS: Record<string, CoreFolder> = {
   people: {
@@ -496,23 +497,42 @@ export function layOutPage(pageIndex: number): (CoreCell | null)[] {
   return cells;
 }
 
-/** Row two, then the six cells beside back on row three. Thirteen in all. */
-const FOLDER_SLOTS = [7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20];
+/** Row two, then the six cells beside back — including next's corner. */
+const FOLDER_SLOTS_FIT = [7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20];
+/** Same, but next keeps its corner so a second page can exist. */
+const FOLDER_SLOTS_PAGED = [7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19];
+
+/** Words that still fit on one folder screen, using next's cell as a word. */
+export const FOLDER_FIT = FOLDER_SLOTS_FIT.length;
+/** Words per page once a folder has overflowed. */
+export const FOLDER_PAGE_SIZE = FOLDER_SLOTS_PAGED.length;
+
+export function folderPageCount(wordCount: number): number {
+  if (wordCount <= FOLDER_FIT) return 1;
+  return Math.ceil(wordCount / FOLDER_PAGE_SIZE);
+}
 
 /**
  * A folder laid into the same twenty-one cells: the pinned core row, then the
- * folder's words, with back in its usual corner and no next button, because a
- * folder is never more than one screen.
+ * folder's words, with back in its usual corner. Next appears in its usual
+ * corner only when there are more words than one screen can hold.
  */
-export function layOutFolder(folderWords: CoreCell[]): (CoreCell | null)[] {
+export function layOutFolder(folderWords: CoreCell[], pageIndex = 0): (CoreCell | null)[] {
+  const overflow = folderWords.length > FOLDER_FIT;
+  const slots = overflow ? FOLDER_SLOTS_PAGED : FOLDER_SLOTS_FIT;
+  const pages = folderPageCount(folderWords.length);
+  const page = Math.min(Math.max(0, pageIndex), pages - 1);
+  const slice = folderWords.slice(page * slots.length, (page + 1) * slots.length);
+
   const cells: (CoreCell | null)[] = new Array(CORE_CELLS).fill(null);
   PINNED_CORE_ROW.forEach((cell, i) => {
     cells[i] = cell;
   });
   cells[BACK_SLOT] = BACK_CELL;
+  if (overflow) cells[NEXT_SLOT] = NEXT_CELL;
 
-  FOLDER_SLOTS.forEach((slot, i) => {
-    cells[slot] = folderWords[i] ?? null;
+  slots.forEach((slot, i) => {
+    cells[slot] = slice[i] ?? null;
   });
   return cells;
 }

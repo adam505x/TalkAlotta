@@ -53,10 +53,21 @@ export interface AddRequest {
   role: WordRole;
   /** The picture the caregiver chose, if they chose one. */
   imageUrl?: string;
+  /** Existing folder to put a new button in. */
+  folderId?: string;
+}
+
+export interface AddFolderChoice {
+  id: string;
+  title: string;
+  role: WordRole;
+  group: 'always' | 'moment';
 }
 
 export function AddThingSheet({
   folderTitle,
+  folders,
+  currentFolderId,
   canAddButton,
   busy,
   error,
@@ -64,6 +75,8 @@ export function AddThingSheet({
   onClose,
 }: {
   folderTitle: string | null;
+  folders: AddFolderChoice[];
+  currentFolderId: string | null;
   canAddButton: boolean;
   busy?: boolean;
   error?: string | null;
@@ -72,7 +85,9 @@ export function AddThingSheet({
 }) {
   const [isFolder, setIsFolder] = useState(!canAddButton);
   const [label, setLabel] = useState('');
-  const [role, setRole] = useState<WordRole>('noun');
+  const [folderId, setFolderId] = useState(currentFolderId ?? folders[0]?.id ?? '');
+  const chosenFolder = folders.find((folder) => folder.id === folderId) ?? folders[0] ?? null;
+  const [role, setRole] = useState<WordRole>(chosenFolder?.role ?? 'noun');
 
   const [options, setOptions] = useState<Candidate[]>([]);
   const [chosen, setChosen] = useState<string | null>(null);
@@ -113,6 +128,7 @@ export function AddThingSheet({
             label: label.trim(),
             role,
             imageUrl: chosen ?? undefined,
+            folderId: isFolder ? undefined : folderId,
           });
         }}
         role="dialog"
@@ -127,7 +143,7 @@ export function AddThingSheet({
             className={`seg__opt${!isFolder ? ' is-on' : ''}`}
             onClick={() => setIsFolder(false)}
             disabled={!canAddButton}
-            title={canAddButton ? undefined : 'Open a folder first to add a button to it'}
+            title={canAddButton ? undefined : 'There is no folder to put a button in yet'}
           >
             A button
           </button>
@@ -140,9 +156,42 @@ export function AddThingSheet({
           </button>
         </div>
 
-        {!isFolder && folderTitle ? (
+        {!isFolder ? (
+          <>
+            <span className="sheet__label">Which folder?</span>
+            {(['always', 'moment'] as const).map((group) => {
+              const rows = folders.filter((folder) => folder.group === group);
+              if (rows.length === 0) return null;
+              return (
+                <div key={group}>
+                  <p className="text-xs font-semibold" style={{ color: '#6c727b' }}>
+                    {group === 'always' ? 'Always on the board' : 'For this moment'}
+                  </p>
+                  <div className="kinds mt-2">
+                    {rows.map((folder) => (
+                      <button
+                        key={folder.id}
+                        type="button"
+                        className={`kind${folderId === folder.id ? ' is-on' : ''}`}
+                        onClick={() => {
+                          setFolderId(folder.id);
+                          setRole(folder.role);
+                        }}
+                      >
+                        {folder.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        ) : null}
+
+        {!isFolder && chosenFolder ? (
           <p className="text-xs font-semibold" style={{ color: '#6c727b' }}>
-            It goes in <b>{folderTitle}</b>.
+            It goes in <b>{chosenFolder.title}</b>
+            {folderTitle && chosenFolder.id === currentFolderId ? ', the open folder' : ''}.
           </p>
         ) : null}
 
@@ -257,7 +306,7 @@ export function AddThingSheet({
             type="submit"
             className="min-h-[52px] rounded-[10px] px-5 font-bold disabled:opacity-50"
             style={{ background: 'var(--teal)', color: 'var(--teal-ink)' }}
-            disabled={busy || !label.trim()}
+            disabled={busy || !label.trim() || (!isFolder && !folderId)}
           >
             {busy ? 'Adding...' : 'Add it'}
           </button>

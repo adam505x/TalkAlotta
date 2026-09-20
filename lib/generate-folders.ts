@@ -25,7 +25,7 @@ import { arasaacPicture } from './core-words';
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5';
 
-/** About five per folder. More than six and a folder stops being scannable. */
+/** About five generated per folder. Extra caregiver words page rather than crowding. */
 export const PER_FOLDER = 5;
 
 export const FOLDER_IDS = ['people', 'actions', 'things', 'describing'] as const;
