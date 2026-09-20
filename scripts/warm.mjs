@@ -24,20 +24,32 @@ try {
   }
   const board = await res.json();
 
-  const coreTiles = (board.coreRows ?? []).flat();
-  const tiles = board.pages.flatMap((p) => p.tiles).concat(coreTiles);
-  const missing = tiles.filter((t) => !t.imageUrl).map((t) => t.term);
+  const pictures = board.pictures ?? {};
+  const tiles = board.pages.flatMap((p) => p.tiles);
+  const missing = [
+    ...tiles.filter((t) => !t.imageUrl).map((t) => t.term),
+    ...Object.entries(pictures).filter(([, url]) => !url).map(([term]) => term),
+  ];
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
 
   console.log('done');
-  console.log(`  ${board.pages.length} folders, ${tiles.length} pictures, ${elapsed}s`);
-  console.log(`  core block: ${board.coreRows.length} rows of ${board.coreRows[0]?.length ?? 0}`);
-  for (const row of board.coreRows) {
-    console.log(`    ${row.map((c) => c.label).join(' · ')}`);
-  }
+  console.log(`  ${board.pages.length} dynamic folders, ${tiles.length} pictures, ${elapsed}s`);
+  console.log(`  fixed board: ${Object.keys(pictures).length} words resolved`);
+  console.log(`  context: ${board.contextLabel}`);
   if (missing.length) {
     console.log(`  no picture found for: ${missing.join(', ')}`);
   }
+
+  const folders = [
+    'people', 'actions', 'questions', 'describe', 'places', 'things',
+    'numbers', 'little', 'chat', 'food', 'emotions', 'time',
+  ];
+  process.stdout.write(`  warming ${folders.length} folders `);
+  for (const folder of folders) {
+    await fetch(`${base}/api/boards?folder=${folder}`);
+    process.stdout.write('.');
+  }
+  console.log(' done');
 
   const second = Date.now();
   await fetch(`${base}/api/boards`);

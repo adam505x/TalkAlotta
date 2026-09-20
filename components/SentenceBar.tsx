@@ -1,17 +1,29 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 /**
  * The sentence builder across the top of the board.
  *
- * How it behaves, from the spec: pressing a button speaks that word straight away
- * AND adds it to this bar. The button on the LEFT of the bar speaks the whole
- * sentence together when the communicator is ready.
+ * Pressing a board button speaks that word straight away AND adds it here.
  *
- * Delete removes the last word. Holding it clears the whole sentence, so a long
- * sentence does not need fifteen taps to undo.
+ * TAP THE BAR ITSELF TO SPEAK THE WHOLE SENTENCE. There is no separate say
+ * button: the sentence is the thing you want said, so it is the thing you press.
+ * One less button on screen, and one less thing to aim at.
+ *
+ * THE DELETE KEY IS ONE TAP BACK, TWO TAPS CLEAR. Taken from the reference
+ * project, where it came from watching a communicator use their real device: they
+ * would build up a long sentence, hit something by accident, and double tap the
+ * backspace to stop it. Matching an interaction someone already has motor memory
+ * for beats inventing a better one.
+ *
+ * The cost of that is deliberate: a single tap waits 350ms before deleting, to
+ * see whether a second tap is coming. Backspace feels a touch slower so that
+ * clear-everything is reachable without a long press.
  */
+
+/** A second tap inside this window means "clear", not "delete another". */
+const DOUBLE_TAP_MS = 350;
 
 export interface SentenceWord {
   term: string;
@@ -35,43 +47,42 @@ export function SentenceBar({
   onDeleteLast,
   onClear,
   onOpenMenu,
-  speaking,
   iconScale = 1,
 }: SentenceBarProps) {
   const sentence = words.map((w) => w.label).join(' ');
   const empty = words.length === 0;
 
-  // Held in a ref, not a local: a re-render between pointer down and pointer up
-  // would otherwise lose the timer and delete would silently stop working.
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cleared = useRef(false);
+  const lastTap = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const startHold = useCallback(() => {
-    cleared.current = false;
-    holdTimer.current = setTimeout(() => {
-      cleared.current = true;
-      holdTimer.current = null;
+  // A pending single tap must not fire after this bar has gone away.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const handleDelete = useCallback(() => {
+    const now = Date.now();
+
+    if (now - lastTap.current < DOUBLE_TAP_MS) {
+      // Second tap: cancel the pending single-word delete and clear the lot.
+      if (timer.current) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+      lastTap.current = 0;
       onClear();
-    }, 600);
-  }, [onClear]);
-
-  const endHold = useCallback(() => {
-    if (holdTimer.current) {
-      clearTimeout(holdTimer.current);
-      holdTimer.current = null;
+      return;
     }
-    // A completed hold already cleared everything; don't also delete a word.
-    if (!cleared.current) onDeleteLast();
-    cleared.current = false;
-  }, [onDeleteLast]);
 
-  const cancelHold = useCallback(() => {
-    if (holdTimer.current) {
-      clearTimeout(holdTimer.current);
-      holdTimer.current = null;
-    }
-    cleared.current = false;
-  }, []);
+    lastTap.current = now;
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      onDeleteLast();
+    }, DOUBLE_TAP_MS);
+  }, [onClear, onDeleteLast]);
 
   return (
     <div
@@ -97,40 +108,15 @@ export function SentenceBar({
         </svg>
       </button>
 
-      {/* Speak-the-whole-sentence button, on the left as specified. */}
+      {/* The sentence IS the speak button. Pictures plus words, so it reads
+          either way, and tapping anywhere on it says the whole thing. */}
       <button
         type="button"
         onClick={onSpeakAll}
-        disabled={empty || speaking}
+        disabled={empty}
         aria-label={empty ? 'Nothing to say yet' : `Say the whole sentence: ${sentence}`}
-        className="flex min-h-[60px] min-w-[86px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-3 font-bold disabled:opacity-40"
-        style={{ background: 'var(--teal)', color: 'var(--teal-ink)' }}
-      >
-        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
-          <path
-            d="M4 9v6h3l5 4V5L7 9H4z"
-            fill="currentColor"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M16 8.5a5 5 0 0 1 0 7"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        </svg>
-        <span className="text-sm">say it</span>
-      </button>
-
-      {/* The sentence itself: pictures plus words, so it is readable either way. */}
-      <div
-        className="flex min-h-[60px] flex-1 items-center gap-2 overflow-x-auto rounded-lg px-2"
+        className="flex min-h-[60px] flex-1 items-center gap-2 overflow-x-auto rounded-lg px-2 text-left disabled:cursor-default"
         style={{ background: '#ffffff' }}
-        aria-live="polite"
-        aria-label="Sentence so far"
       >
         {empty ? (
           <span className="px-2 font-bold" style={{ color: '#9ca1a9' }}>
@@ -161,17 +147,15 @@ export function SentenceBar({
             </span>
           ))
         )}
-      </div>
+      </button>
 
-      {/* Delete last word; hold to clear everything. */}
+      {/* One tap takes the last word back; two taps clear the whole sentence. */}
       <button
         type="button"
-        onPointerDown={startHold}
-        onPointerUp={endHold}
-        onPointerLeave={cancelHold}
-        onPointerCancel={cancelHold}
+        onClick={handleDelete}
         disabled={empty}
-        aria-label="Delete the last word. Hold to clear the whole sentence."
+        aria-label="Delete the last word. Tap twice to clear the whole sentence."
+        title="Tap to delete the last word · tap twice to clear"
         className="flex min-h-[60px] min-w-[68px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border-2 px-3 font-bold disabled:opacity-40"
         style={{ background: '#ffffff', borderColor: 'var(--danger)', color: 'var(--danger)' }}
       >

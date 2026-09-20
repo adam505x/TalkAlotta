@@ -27,7 +27,7 @@ export interface Candidate {
 
 export function PictureSheet({
   term,
-  role = 'object',
+  role = 'noun',
   onClose,
   onPicked,
 }: {

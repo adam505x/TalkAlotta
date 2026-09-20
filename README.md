@@ -214,10 +214,35 @@ made it in the first place.
 icon": type a word, a picture is found for it, and it joins that folder. A word
 with no usable picture is refused rather than added blank.
 
-**A described situation becomes a folder.** The board stays predictable and the
-moment-specific words live one tap inside a folder named after that moment.
-Describing a new situation adds a folder rather than rearranging the board.
-Reopening a saved board is just tapping its folder.
+**Four folders, always the same four.** People, doing, things, describing. Every
+situation decomposes into those, so the folders themselves never move or change
+in number; only what is inside them changes. That is what keeps the board
+learnable while still being different in every place.
+
+**What goes inside comes from the moment.** The time of day, where the person is,
+the weather, and any activity that has been typed in. It is generated rather than
+looked up, because nobody can hand-write a word list for every venue and the
+specific cases are the whole point: a Chick-fil-A gives server, order, sandwich,
+chips and salty; a tennis court gives coach, serve, racket and fast; the same park
+gives a slide and sand when it is sunny and a puddle, an umbrella and slippery
+when it is raining.
+
+Each folder holds about five words, never more than six. Past that a folder stops
+being something you can scan.
+
+**Typing a situation refills the same four folders.** Knowing someone is at school
+does not tell you they are in an art class, which is the gap New situation fills.
+It does not add a folder or rearrange anything.
+
+**Everything is cached by the moment.** The same place at the same time of day in
+the same weather shows the same words and costs nothing the second time. A board
+that reshuffled itself between visits would undo the muscle memory the fixed
+layout exists to build.
+
+**Adding a word teaches it where that word belongs.** Add "Liam" while the board
+is at school and Liam is pinned to school: he comes back on the next visit and
+stays off the board at home. Automatic removal of words that stop being pressed is
+the other half, and needs a press history before it can mean anything.
 
 **Confidence is real now.** It used to be a constant per source, so sorting was
 effectively source-only. Each candidate is now scored on whether every word of the
@@ -260,17 +285,16 @@ retry.
 
 ## Demo controls
 
-Inside the situation popup, under the four suggestions, there is a time-of-day
-slider and a row of places. It is there and nowhere else, because its only job is
-to show that the suggestions change with the context: move the slider and the four
-suggestions above it change in front of you.
+The round logo button in the bottom right opens time of day, place and weather.
 
-It is not on the board. A communicator has no reason to pretend it is a different
-time of day, and in real use the time comes from the clock and the place would come
-from the device.
+It exists only for demonstrating. In real use the time comes from the clock and
+the place and weather from the device, and nobody waits for rain to show that the
+board offers an umbrella when it rains. It is tucked behind a small round button
+on purpose: it is the one control on screen that belongs to whoever is
+demonstrating rather than to the communicator.
 
-Changing either one also reassembles the board behind the popup, so the bottom
-folder swaps to that time of day and a folder for the place appears.
+Place is a text box with quick presets, so you can tap School or type Chick-fil-A
+and get what that business actually sells.
 
 ## Switching model for the demo
 

@@ -23,54 +23,56 @@
   --teal-ink: #eafbfb;
   --danger: #d8483a;
 
+  /* Edit mode has one colour of its own, so there is never any doubt that the
+     board is in a state where a tap changes something instead of speaking. */
+  --edit: #b4541f;
+  --edit-ink: #fdf0e7;
+
   /* Text used on top of the dark chrome. */
   --on-chrome: #e8eaed;
   --on-chrome-soft: #9ca1a9;
 
-  /* Fitzgerald-style role colours: tinted face, strong border, dark label. */
-  --role-core-bg: #ffe45c;
-  --role-core-fg: #1a1a1a;
-  --role-core-line: #c9a91f;
+  /* Part-of-speech colours. Colour encodes part of speech, and like-coloured
+     buttons are grouped together on the board, which is what makes them faster
+     to find than the same buttons scattered. Colour is never the only signal:
+     every button also carries its word. */
+  --role-noun-bg: #e8843c;
+  --role-noun-fg: #23150a;
 
-  --role-action-bg: #8fdb6e;
-  --role-action-fg: #14210e;
-  --role-action-line: #4f9b35;
+  --role-verb-bg: #46a758;
+  --role-verb-fg: #0c1f11;
 
-  --role-object-bg: #ffe9a8;
-  --role-object-fg: #231a05;
-  --role-object-line: #c9a343;
+  --role-adjective-bg: #5090d3;
+  --role-adjective-fg: #0a1a2a;
 
-  --role-place-bg: #ffa94d;
-  --role-place-fg: #241203;
-  --role-place-line: #c26a12;
+  --role-pronoun-bg: #f2c94c;
+  --role-pronoun-fg: #241e06;
 
-  --role-feeling-bg: #f79bd3;
-  --role-feeling-fg: #2a0f20;
-  --role-feeling-line: #bf5a96;
+  /* Pink also carries the social words. */
+  --role-preposition-bg: #e88aa8;
+  --role-preposition-fg: #2a0f1a;
 
-  --role-modifier-bg: #7cbeff;
-  --role-modifier-fg: #0d1a28;
-  --role-modifier-line: #3d80c4;
+  --role-question-bg: #9b7ede;
+  --role-question-fg: #18102b;
 
-  --role-affirm-bg: #4cc45c;
-  --role-affirm-fg: #0a1f0d;
-  --role-affirm-line: #237d2f;
+  /* Red is negation and emergency. */
+  --role-urgent-bg: #e25b5b;
+  --role-urgent-fg: #ffffff;
 
-  --role-negate-bg: #ec5b45;
-  --role-negate-fg: #ffffff;
-  --role-negate-line: #a62f1e;
+  --role-adverb-bg: #a9744f;
+  --role-adverb-fg: #ffffff;
 
-  --role-folder-bg: #e4e1d4;
-  --role-folder-fg: #1a1a1a;
-  --role-folder-line: #8d8873;
+  --role-conjunction-bg: #ffffff;
+  --role-conjunction-fg: #1a1a1a;
 
-  --role-nav-bg: #c9c9be;
-  --role-nav-fg: #1a1a1a;
-  --role-nav-line: #7e7e72;
+  --role-determiner-bg: #b8b5ae;
+  --role-determiner-fg: #1a1a1a;
 
-  --role-scenario-bg: #0e767c;
-  --role-scenario-fg: #eafbfb;
-  --role-scenario-line: #7fd4d8;
+  /* yes. A deeper green than the verbs, so it never reads as one. It sits at the
+     far left of its row with no at the far right, as far apart as the grid
+     allows, because a slip between them reverses consent. */
+  --role-affirm-bg: #1f7a45;
+  --role-affirm-fg: #ffffff;
 
   --tile-radius: 10px;
   --gap: 8px;
@@ -93,30 +95,30 @@
   --on-chrome: #ffffff;
   --on-chrome-soft: #d0d4da;
 
-  --role-core-bg: #000;
-  --role-core-fg: #fff;
-  --role-action-bg: #000;
-  --role-action-fg: #fff;
-  --role-object-bg: #000;
-  --role-object-fg: #fff;
-  --role-place-bg: #000;
-  --role-place-fg: #fff;
-  --role-feeling-bg: #000;
-  --role-feeling-fg: #fff;
-  --role-modifier-bg: #000;
-  --role-modifier-fg: #fff;
-  --role-folder-bg: #000;
-  --role-folder-fg: #fff;
-  --role-nav-bg: #000;
-  --role-nav-fg: #fff;
-  --role-scenario-bg: #000;
-  --role-scenario-fg: #fff;
+  --role-noun-bg: #000;
+  --role-noun-fg: #fff;
+  --role-verb-bg: #000;
+  --role-verb-fg: #fff;
+  --role-adjective-bg: #000;
+  --role-adjective-fg: #fff;
+  --role-pronoun-bg: #000;
+  --role-pronoun-fg: #fff;
+  --role-preposition-bg: #000;
+  --role-preposition-fg: #fff;
+  --role-question-bg: #000;
+  --role-question-fg: #fff;
+  --role-adverb-bg: #000;
+  --role-adverb-fg: #fff;
+  --role-conjunction-bg: #000;
+  --role-conjunction-fg: #fff;
+  --role-determiner-bg: #000;
+  --role-determiner-fg: #fff;
   /* yes and no keep their colour even here: they are the two buttons where
      colour carries real meaning and must stay distinguishable. */
   --role-affirm-bg: #003d12;
   --role-affirm-fg: #7cff96;
-  --role-negate-bg: #4a0a03;
-  --role-negate-fg: #ff9c8c;
+  --role-urgent-bg: #4a0a03;
+  --role-urgent-fg: #ff9c8c;
 }
 
 * {
@@ -289,10 +291,139 @@ button {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--teal);
+  background: var(--edit);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
+}
+
+/* ------------------------------------------------------------ edit mode ----
+   A brown frame drawn around the whole screen while editing. It sits above the
+   board and ignores pointer events, so it marks the state without getting in the
+   way of the thing being edited.
+-------------------------------------------------------------------------- */
+.is-editing::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  border: 5px solid var(--edit);
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.editbanner {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  border-radius: 8px;
+  background: var(--edit);
+  color: var(--edit-ink);
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* The menu button turns brown too, so the state is visible even when the banner
+   has scrolled out of view. */
+.menu-button.is-editing {
+  background: var(--edit);
+  color: #fff;
+}
+
+/* ------------------------------------------------------------ hold button --
+   Press and hold to confirm. The menu opens freely because browsing it is
+   harmless, but turning editing ON takes a deliberate action, so a child tapping
+   around cannot end up in it.
+-------------------------------------------------------------------------- */
+.hold {
+  position: relative;
+  overflow: hidden;
+  border: none;
+  border-radius: 9px;
+  padding: 14px;
+  min-height: 52px;
+  width: 100%;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--teal);
+  color: #fff;
+}
+.hold__fill {
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: rgba(255, 255, 255, 0.3);
+}
+.hold.is-holding .hold__fill {
+  width: 100%;
+  transition: width var(--hold-ms) linear;
+}
+.hold__label {
+  position: relative;
+}
+
+/* A small on/off pill, so the current state reads at a glance. */
+.pill {
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: #e7e7df;
+  color: #6c727b;
+}
+.pill--on {
+  background: var(--edit);
+  color: var(--edit-ink);
+}
+
+/* ------------------------------------------------ segmented + kind chips --- */
+.seg {
+  display: flex;
+  gap: 6px;
+  border-radius: 10px;
+  background: #e7e7df;
+  padding: 4px;
+}
+.seg__opt {
+  flex: 1;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  padding: 12px;
+  font: inherit;
+  font-weight: 700;
+  color: #6c727b;
+  cursor: pointer;
+  min-height: 44px;
+}
+.seg__opt.is-on {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.kind {
+  border: 3px solid transparent;
+  border-radius: 9px;
+  padding: 10px 13px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  min-height: 44px;
+}
+.kind.is-on {
+  border-color: var(--ink);
 }
 
 /* ---------------------------------------------------------------- sheets --- */
@@ -433,16 +564,45 @@ button {
   background: #eaf3f3;
 }
 
-/* --------------------------------------------------- demo controls (inline) -
-   Lives inside the situation popup, because its only job is to show that the
-   suggested situations change with the time of day and the place.
+/* ------------------------------------------------------- demo controls -----
+   A round logo button in the bottom right, and the panel it opens. Deliberately
+   small and out of the way: forcing the time of day is the one control on screen
+   that belongs to whoever is demonstrating, not to the communicator.
 -------------------------------------------------------------------------- */
-.demo-inline {
+.demo-fab {
+  position: fixed;
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 25;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: var(--chrome);
+  color: var(--on-chrome);
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.demo-panel {
+  position: fixed;
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  z-index: 26;
+  width: min(330px, 92vw);
+  max-height: 72dvh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  border-top: 2px dashed #cfcfc4;
-  padding-top: 12px;
+  gap: 12px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 
 /*
