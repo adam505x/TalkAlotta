@@ -1,14 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 /**
- * Hold the situation box open and say it instead of typing.
+ * Wraps a text field so it can be spoken into instead of typed.
  *
  * Tap to start, tap to stop, rather than press-and-hold. A caregiver doing this
  * has a child in the other hand; a finger slipping mid-sentence and silently
  * losing the recording is worse than needing a second tap. It also stops on its
  * own after MAX_SECONDS so a forgotten recording cannot run.
+ *
+ * The field is passed in as a child so the box the microphone is positioned
+ * against holds the field and nothing else. Keep the status lines outside that
+ * box: the button is centred on the box's height, so anything that grows inside
+ * it drags the button down off the field.
  *
  * Recording needs a secure context - https or localhost. On a laptop running
  * `npm run dev` that is fine; opening the dev server from a phone over the LAN
@@ -22,9 +27,12 @@ type State = 'idle' | 'recording' | 'thinking' | 'error';
 export function MicButton({
   onTranscript,
   disabled,
+  children,
 }: {
   onTranscript: (text: string) => void;
   disabled?: boolean;
+  /** The field the microphone sits inside. */
+  children: ReactNode;
 }) {
   const [state, setState] = useState<State>('idle');
   const [message, setMessage] = useState<string | null>(null);
@@ -129,42 +137,45 @@ export function MicButton({
   const busy = state === 'thinking';
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={recording ? stop : start}
-        disabled={disabled || busy}
-        aria-label={recording ? 'Stop recording' : 'Say what is happening'}
-        aria-pressed={recording}
-        title={recording ? 'Tap to stop' : 'Tap and say what is happening'}
-        style={{
-          position: 'absolute',
-          right: 8,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          width: 40,
-          height: 40,
-          borderRadius: 10,
-          border: 'none',
-          display: 'grid',
-          placeItems: 'center',
-          cursor: disabled || busy ? 'default' : 'pointer',
-          background: recording ? '#c4402f' : busy ? '#e7e7df' : '#eaf3f3',
-          color: recording ? '#fff' : '#0e767c',
-          opacity: disabled ? 0.5 : 1,
-        }}
-      >
-        {busy ? (
-          <span style={{ fontSize: 11, fontWeight: 700 }}>...</span>
-        ) : (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-            <rect x="9" y="2.5" width="6" height="11" rx="3" />
-            <path d="M5.5 11a6.5 6.5 0 0 0 13 0" />
-            <path d="M12 17.5V21" />
-          </svg>
-        )}
-      </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ position: 'relative' }}>
+        {children}
+        <button
+          type="button"
+          onClick={recording ? stop : start}
+          disabled={disabled || busy}
+          aria-label={recording ? 'Stop recording' : 'Say what is happening'}
+          aria-pressed={recording}
+          title={recording ? 'Tap to stop' : 'Tap and say what is happening'}
+          style={{
+            position: 'absolute',
+            right: 8,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 40,
+            height: 40,
+            borderRadius: 10,
+            border: 'none',
+            display: 'grid',
+            placeItems: 'center',
+            cursor: disabled || busy ? 'default' : 'pointer',
+            background: recording ? '#c4402f' : busy ? '#e7e7df' : '#eaf3f3',
+            color: recording ? '#fff' : '#0e767c',
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          {busy ? (
+            <span style={{ fontSize: 11, fontWeight: 700 }}>...</span>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <rect x="9" y="2.5" width="6" height="11" rx="3" />
+              <path d="M5.5 11a6.5 6.5 0 0 0 13 0" />
+              <path d="M12 17.5V21" />
+            </svg>
+          )}
+        </button>
+      </div>
 
       {recording ? (
         <p className="text-sm font-semibold" style={{ color: '#c4402f' }} role="status">
@@ -187,6 +198,6 @@ export function MicButton({
           {message}
         </p>
       ) : null}
-    </>
+    </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { MicButton } from './MicButton';
+import { Button } from './ui/button';
 
 /**
  * Describe what is happening.
@@ -55,8 +56,9 @@ export function ScenarioSheet({
             event.preventDefault();
             if (text.trim()) onPick(text.trim());
           }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
         >
-          <div style={{ position: 'relative' }}>
+          <MicButton disabled={busy} onTranscript={(heard) => setText(heard)}>
             <input
               className="sheet__field"
               value={text}
@@ -67,11 +69,20 @@ export function ScenarioSheet({
               aria-label="Describe what is happening"
               style={{ paddingRight: 56 }}
             />
-            <MicButton
-              disabled={busy}
-              onTranscript={(heard) => setText(heard)}
-            />
-          </div>
+          </MicButton>
+
+          {/* Spoken input has no Enter key to press, so the commit has to be a
+              button. Always shown, disabled while empty, so it does not appear
+              under the finger only once there is text. */}
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            className="w-full"
+            disabled={busy || !text.trim()}
+          >
+            Accept
+          </Button>
         </form>
 
         <p className="sheet__label">Suggested now</p>
