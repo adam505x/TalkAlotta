@@ -5,6 +5,9 @@ node_modules/
 out/
 build/
 data/
+# Audio written by scripts/voice-lab.mjs while comparing how Aura says a word.
+# Listened to once and regenerated on demand; not worth 2MB of binary history.
+scripts/voice-lab/
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
