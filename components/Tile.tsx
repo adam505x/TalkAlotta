@@ -103,8 +103,17 @@ export function Tile({
   const face = VARIANT_FACES[variant] ?? ROLE_FACES[role] ?? ROLE_FACES.noun;
   const isFolder = variant === 'folder';
 
+  // A caregiver's own photo is framed differently from a library pictogram, and
+  // the URL is what separates them: uploads are the ones served from /api/image.
+  const isPhoto = imageUrl.startsWith('/api/image/');
+
   const picture = imageUrl ? (
-    <img src={imageUrl} alt="" draggable={false} className="cell__img" />
+    <img
+      src={imageUrl}
+      alt=""
+      draggable={false}
+      className={cn('cell__img', isPhoto && 'cell__img--photo')}
+    />
   ) : (
     <span aria-hidden="true" className="cell__placeholder" />
   );

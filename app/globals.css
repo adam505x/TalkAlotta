@@ -604,6 +604,24 @@ input[type="range"]::-moz-range-thumb {
   object-fit: contain;
   pointer-events: none;
 }
+
+/* A caregiver's own photo, rather than a library pictogram.
+
+   A pictogram is drawn square on transparent space, so `contain` shows all of
+   it and the empty margin around it is the artwork's own. A photo is a
+   rectangle off a phone camera, and `contain` shrinks a portrait until its
+   HEIGHT fits the picture area - leaving bars down both sides and a picture far
+   smaller than the tile holding it. `cover` fills the area instead and takes
+   the crop off the long edge, which is the whole reason a caregiver reached for
+   their own photo in the first place: they wanted it to be seen.
+
+   Only uploads get this. `cover` on a pictogram would crop the artwork's own
+   edges, which is exactly the damage it prevents here. The small radius stops a
+   filled photo reading as a rendering mistake against the tile's own corners. */
+.cell__img--photo {
+  object-fit: cover;
+  border-radius: 6px;
+}
 .cell__placeholder {
   flex: 1;
   min-height: 0;
