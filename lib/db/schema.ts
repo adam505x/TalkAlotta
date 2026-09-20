@@ -40,8 +40,9 @@ export const profile = sqliteTable('profile', {
   voiceId: text('voice_id'),
   voiceLabel: text('voice_label'),
 
-  /** Playback loudness, 0-100. Applied in the browser via a Web Audio gain. */
-  speechVolume: integer('speech_volume').notNull().default(100),
+  // No speech_volume. iOS makes an in-app volume control cost the device its
+  // sound entirely (see lib/speech.ts), so loudness is left to the hardware
+  // buttons. Databases created before this keep the column; nothing reads it.
 
   onboardedAt: text('onboarded_at'),
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),

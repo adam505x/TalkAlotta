@@ -10,7 +10,7 @@ import { CaregiverDrawer, type CaregiverAction } from '@/components/CaregiverDra
 import { AddThingSheet, type AddFolderChoice, type AddRequest } from '@/components/AddThingSheet';
 import { DashboardSheet } from '@/components/DashboardSheet';
 import { SettingsSheet } from '@/components/SettingsSheet';
-import { setSpeechVolume, speak, stopSpeaking, unlockAudio } from '@/lib/speech';
+import { speak, stopSpeaking, unlockAudio } from '@/lib/speech';
 import { analyticsSessionId, track } from '@/lib/track';
 import type { DashboardRange, DashboardStats } from '@/lib/analytics-types';
 import { NAV_ICONS, timeOfDay, type TimeBucket, type WordRole } from '@/lib/core-words';
@@ -67,7 +67,6 @@ interface BoardPayload {
     colorVision: string;
   };
   voice: { voiceId: string; label: string };
-  speechVolume?: number;
   onboarded: boolean;
 }
 
@@ -258,11 +257,6 @@ export default function BoardPage() {
     window.addEventListener('pointerdown', handler, { once: true });
     return () => window.removeEventListener('pointerdown', handler);
   }, []);
-
-  // Loudness is a caregiver setting, so the board has to apply it on load.
-  useEffect(() => {
-    if (typeof data?.speechVolume === 'number') setSpeechVolume(data.speechVolume);
-  }, [data?.speechVolume]);
 
   const layout = data?.layout;
 

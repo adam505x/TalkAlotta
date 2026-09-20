@@ -29,7 +29,6 @@ export async function GET(request: Request) {
       recommended: recommendedScenarios(board.context.timeBucket, board.context.location),
       layout: getLayout(profile),
       voice: getVoice(profile),
-      speechVolume: profile.speechVolume,
       onboarded: profile.onboarded,
     });
   } catch (error) {

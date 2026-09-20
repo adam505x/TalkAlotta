@@ -18,25 +18,24 @@
  * 3. Repeated presses must feel instant. Audio already fetched is held in memory,
  *    so pressing the same button twice never waits on the network. The server
  *    cache stops repeats costing credits; this stops them costing time.
+ *
+ * THERE IS NO VOLUME CONTROL HERE, AND THERE MUST NOT BE ONE.
+ *
+ * iOS makes HTMLMediaElement.volume read-only, because loudness belongs to the
+ * hardware buttons. The only way to honour an in-app volume slider is to pass
+ * the audio through a Web Audio GainNode — and calling createMediaElementSource
+ * moves playback off the media channel, which ignores the Ring/Silent switch,
+ * onto Web Audio output, which does not. An iPad on silent then says nothing at
+ * all, and an iPad whose stored volume was anything under full went quiet a
+ * moment into the first clip as the graph was built around it.
+ *
+ * That is a bad trade for any app and an indefensible one for a board whose
+ * entire job is to speak. The element is left alone, and the volume buttons on
+ * the side of the iPad do the job they already do well.
  */
 
 let audioEl: HTMLAudioElement | null = null;
-let audioCtx: AudioContext | null = null;
-let gainNode: GainNode | null = null;
 let unlocked = false;
-
-/** Caregiver-set loudness, 0–100. Default is full. */
-let volumePercent = 100;
-
-/**
- * Gain at 100% volume.
- *
- * Stays at 1. The server levels every clip to a fixed loudness with headroom, so
- * the bytes already arrive as loud as they can be without distorting. Raising
- * this would only clip them — the old multiplier existed to rescue quiet Aura
- * clips, and that is now handled before the audio is sent.
- */
-const GAIN_AT_FULL = 1;
 
 /** 30ms of silence, used to unlock audio playback on the first touch. */
 const SILENCE =
@@ -52,12 +51,6 @@ function element(): HTMLAudioElement {
   return audioEl;
 }
 
-function applyGain(): void {
-  if (!gainNode) return;
-  const pct = Math.max(0, Math.min(100, volumePercent)) / 100;
-  gainNode.gain.value = pct * GAIN_AT_FULL;
-}
-
 /**
  * Tell iOS this page plays media, not sound effects.
  *
@@ -67,8 +60,8 @@ function applyGain(): void {
  * speak, that default is wrong: an iPad on silent would simply not talk.
  *
  * Safari 16.4 and later let a page say so outright. Older iPads have no such
- * API, which is why the element is also kept OFF the Web Audio graph below
- * unless something actually needs it.
+ * API and rely on the plain media element alone, which is the other half of why
+ * nothing here ever routes it through Web Audio.
  */
 function claimPlaybackSession(): void {
   if (typeof navigator === 'undefined') return;
@@ -82,74 +75,6 @@ function claimPlaybackSession(): void {
 }
 
 /**
- * Build the Web Audio graph. Only called when the volume is actually turned
- * down — see the note on setSpeechVolume.
- */
-function ensureGain(): void {
-  if (gainNode || typeof window === 'undefined') return;
-  try {
-    const AC =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return;
-    audioCtx = new AC();
-    const source = audioCtx.createMediaElementSource(element());
-    gainNode = audioCtx.createGain();
-    applyGain();
-    source.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-  } catch {
-    /* Web Audio unavailable — stay at element volume 1. */
-  }
-}
-
-async function resumeAudioCtx(): Promise<void> {
-  if (audioCtx && audioCtx.state === 'suspended') {
-    try {
-      await audioCtx.resume();
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-/**
- * Update playback loudness (0-100). Safe to call before audio is unlocked.
- *
- * THIS is the only thing that needs Web Audio, and it is why the graph is built
- * here rather than on the first touch.
- *
- * iOS ignores HTMLMediaElement.volume outright — it is read-only there, because
- * loudness belongs to the hardware buttons — so a caregiver volume slider can
- * only be honoured by passing the audio through a GainNode. But the moment
- * createMediaElementSource is called, playback leaves the media channel and
- * becomes Web Audio output, which on iOS is silenced by the Ring/Silent switch
- * and follows the ringer volume instead of the media volume. An iPad on silent
- * then says nothing at all.
- *
- * So the trade is made only when it buys something. At full volume the gain
- * node would multiply by exactly 1 and change nothing audible, so the element
- * is left alone and plays on the media channel like any other audio on the
- * device. Turn the volume down and the graph appears, which is the one case
- * where it is worth having.
- */
-export function setSpeechVolume(percent: number): void {
-  volumePercent = Math.max(0, Math.min(100, Math.round(percent)));
-  if (volumePercent < 100) {
-    ensureGain();
-    // Dragging the slider is itself a user gesture, and a context created
-    // outside one starts suspended. Resuming here means it is running before
-    // the next press needs it, which is well after any gesture of its own.
-    void resumeAudioCtx();
-  }
-  applyGain();
-}
-
-export function getSpeechVolume(): number {
-  return volumePercent;
-}
-
-/**
  * Call this from the first real user gesture. Safe to call repeatedly.
  */
 export function unlockAudio(): void {
@@ -157,10 +82,6 @@ export function unlockAudio(): void {
   unlocked = true;
   claimPlaybackSession();
   const el = element();
-  // Deliberately NOT ensureGain(). See setSpeechVolume: routing the element
-  // through Web Audio is what costs an iPad its sound, so it is not done until
-  // there is a reason for it.
-  if (volumePercent < 100) ensureGain();
   try {
     el.src = SILENCE;
     const played = el.play();
@@ -169,7 +90,6 @@ export function unlockAudio(): void {
         /* A blocked unlock is not fatal; the fallback voice still works. */
       });
     }
-    void resumeAudioCtx();
   } catch {
     /* ignore */
   }
@@ -196,7 +116,7 @@ function browserVoice(text: string): boolean {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.95;
-    utterance.volume = Math.max(0, Math.min(1, volumePercent / 100));
+    utterance.volume = 1;
     window.speechSynthesis.speak(utterance);
     return true;
   } catch {
@@ -218,8 +138,6 @@ async function logUtterance(text: string, kind: 'word' | 'sentence', boardId?: n
 }
 
 async function playClip(el: HTMLAudioElement, url: string): Promise<void> {
-  if (volumePercent < 100) ensureGain();
-  await resumeAudioCtx();
   el.pause();
   el.src = url;
   el.playbackRate = 1;
