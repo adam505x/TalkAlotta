@@ -130,16 +130,39 @@ export const hiddenFolders = sqliteTable(
 );
 
 /**
- * Words the caregiver has added to a built-in folder, through the add button
- * inside it. Saved situation folders keep their words in board_items instead.
+ * Words the caregiver has added to a folder themselves.
+ *
+ * `location` is what makes this the learning half: add "Liam" while at school and
+ * it is pinned to school, so he comes back on the next visit and does not clutter
+ * the board at home. A null location means the word belongs everywhere.
  */
 export const folderWords = sqliteTable('folder_words', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   folderId: text('folder_id').notNull(),
   term: text('term').notNull(),
   role: text('role').notNull().default('object'),
+  location: text('location'),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+/**
+ * Generated folder contents, cached per moment.
+ *
+ * Returning to the same place at the same time of day in the same weather shows
+ * the same words and costs nothing. A board that shuffles itself between visits
+ * would undo the muscle memory the fixed layout is there to build.
+ */
+export const contextFolders = sqliteTable(
+  'context_folders',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    cacheKey: text('cache_key').notNull(),
+    context: text('context').notNull(),
+    payload: text('payload').notNull(),
+    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => ({ keyIdx: uniqueIndex('context_folders_key_idx').on(t.cacheKey) }),
+);
 
 /** Uploaded pictures, stored as bytes so there is no filesystem dependency. */
 export const uploads = sqliteTable('uploads', {

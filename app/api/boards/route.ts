@@ -2,13 +2,8 @@ import { NextResponse } from 'next/server';
 import { desc, eq } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
 import { assembleMainBoard, touchBoard } from '@/lib/board';
-import {
-  LOCATION_BUCKETS,
-  TIME_BUCKETS,
-  recommendedScenarios,
-  type LocationBucket,
-  type TimeBucket,
-} from '@/lib/core-words';
+import { recommendedScenarios } from '@/lib/core-words';
+import { readContext } from '@/lib/context';
 import { getLayout, getProfile, getVoice } from '@/lib/profile';
 import { recordFeedback } from '@/lib/symbol-search';
 
@@ -16,31 +11,30 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * The assembled main board: core row, folders, saved situations.
+ * The assembled main board: the fixed core block and the four dynamic folders.
  *
- * `timeBucket` and `location` let the demo controls override the context so the
- * situational adaptation can be shown on demand rather than waited for.
+ * The moment is passed in the query string. In real use the time comes from the
+ * clock, the location and weather from the device; the demo control forces all
+ * three so the adaptation can be shown rather than waited for.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const bucket = url.searchParams.get('timeBucket');
-  const place = url.searchParams.get('location');
-
+  const context = readContext(url.searchParams);
   const profile = getProfile();
-  const board = await assembleMainBoard({
-    timeBucket: TIME_BUCKETS.includes(bucket as TimeBucket) ? (bucket as TimeBucket) : null,
-    location: LOCATION_BUCKETS.includes(place as LocationBucket)
-      ? (place as LocationBucket)
-      : null,
-  });
 
-  return NextResponse.json({
-    ...board,
-    recommended: recommendedScenarios(board.timeBucket, board.location),
-    layout: getLayout(profile),
-    voice: getVoice(profile),
-    onboarded: profile.onboarded,
-  });
+  try {
+    const board = await assembleMainBoard(context, url.searchParams.get('folder'));
+    return NextResponse.json({
+      ...board,
+      recommended: recommendedScenarios(board.context.timeBucket, board.context.location),
+      layout: getLayout(profile),
+      voice: getVoice(profile),
+      onboarded: profile.onboarded,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not build the board.';
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }
 
 interface SaveBody {

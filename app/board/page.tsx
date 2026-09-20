@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Tile } from '@/components/Tile';
 import { SentenceBar, type SentenceWord } from '@/components/SentenceBar';
@@ -8,14 +8,19 @@ import { Sheet } from '@/components/Sheet';
 import { ScenarioSheet } from '@/components/ScenarioSheet';
 import { PictureSheet, type Candidate } from '@/components/PictureSheet';
 import { CaregiverDrawer, type CaregiverAction } from '@/components/CaregiverDrawer';
+import { AddThingSheet, type AddRequest } from '@/components/AddThingSheet';
 import { speak, stopSpeaking, unlockAudio } from '@/lib/speech';
+import { NAV_ICONS, timeOfDay, type TimeBucket, type WordRole } from '@/lib/core-words';
 import {
-  NAV_ICONS,
-  timeOfDay,
-  type LocationBucket,
-  type TimeBucket,
-  type WordRole,
-} from '@/lib/core-words';
+  CORE_COLUMNS,
+  CORE_FOLDERS,
+  CORE_PAGES,
+  layOutFolder,
+  layOutPage,
+  type CoreCell,
+} from '@/lib/core-board';
+import type { Weather } from '@/lib/context';
+import { DemoControls, type DemoState } from '@/components/DemoControls';
 
 interface ApiTile {
   term: string;
@@ -33,13 +38,21 @@ interface ApiPage {
 }
 
 interface BoardPayload {
-  coreRows: ApiTile[][];
+  pictures: Record<string, string>;
   pages: ApiPage[];
-  timeBucket: TimeBucket;
-  location: LocationBucket | null;
+  context: {
+    timeBucket: TimeBucket;
+    location: string | null;
+    weather: Weather | null;
+    situation: string | null;
+  };
+  contextLabel: string;
+  generated: boolean;
   recommended: string[];
   layout: {
     grid: { cols: number; rows: number };
+    /** Fraction of its column each button fills. Set by the tap test in setup. */
+    buttonScale: number;
     gapPx: number;
     iconScale: number;
     vision: string;
@@ -68,9 +81,43 @@ type Overlay =
   | { kind: 'scenario' }
   | { kind: 'dashboard' }
   | { kind: 'saved' }
-  | { kind: 'addWord'; folderId: string; folderTitle: string }
+  | { kind: 'add' }
   | { kind: 'folderEdit'; folderId: string; folderTitle: string }
   | { kind: 'picture'; term: string; role: WordRole; onPicked?: (c: Candidate) => void };
+
+/**
+ * The gap that makes every button fill `scale` of its column.
+ *
+ * Seven columns share six gaps, so for a track to come out at `scale` of the
+ * column pitch the gap has to be (1 - scale) / 6 of the board's width. Size and
+ * spacing are one number on a fixed grid: whatever the button does not fill is
+ * the gap, which is exactly what the caregiver was setting in the setup preview.
+ *
+ * The width is measured rather than assumed. The stored gap was worked out
+ * against a nominal column width during setup, so on any other screen it drifts
+ * from the size that was actually chosen; measuring is what makes the board
+ * match the preview on the iPad it ends up on.
+ *
+ * Returns null until the first measurement, so the caller can fall back.
+ */
+function useButtonGap(scale: number) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [gap, setGap] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // The grid is full-width and the gap does not change that, so measuring the
+    // element the gap is applied to cannot feed back into its own width.
+    const measure = () => setGap((el.clientWidth * (1 - scale)) / (CORE_COLUMNS - 1));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scale]);
+
+  return { ref, gap };
+}
 
 export default function BoardPage() {
   const router = useRouter();
@@ -78,7 +125,8 @@ export default function BoardPage() {
   const [data, setData] = useState<BoardPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openFolder, setOpenFolder] = useState<string | null>(null);
-  const [pageIndex, setPageIndex] = useState(0);
+  /** Which of the three fixed pages is showing, when no folder is open. */
+  const [corePage, setCorePage] = useState(0);
   const [sentence, setSentence] = useState<SentenceWord[]>([]);
   const [speaking, setSpeaking] = useState(false);
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
@@ -87,27 +135,36 @@ export default function BoardPage() {
   const [editMode, setEditMode] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>({ kind: 'none' });
   const [stats, setStats] = useState<Stats | null>(null);
-  const [newWord, setNewWord] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Demo overrides. null means "use the real clock, no location".
-  const [timeOverride, setTimeOverride] = useState<TimeBucket | null>(null);
-  const [locationOverride, setLocationOverride] = useState<LocationBucket | null>(null);
+  // The moment the board is reading. Nulls mean "use the real clock, and nothing
+  // known about the place or the weather".
+  const [demo, setDemo] = useState<DemoState>({
+    timeBucket: null,
+    location: null,
+    weather: null,
+  });
+  const [situation, setSituation] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (timeOverride) params.set('timeBucket', timeOverride);
-      if (locationOverride) params.set('location', locationOverride);
+      if (demo.timeBucket) params.set('timeBucket', demo.timeBucket);
+      if (demo.location) params.set('location', demo.location);
+      if (demo.weather) params.set('weather', demo.weather);
+      if (situation) params.set('situation', situation);
+      if (openFolder?.startsWith('core:')) params.set('folder', openFolder.slice(5));
+
       const res = await fetch(`/api/boards?${params.toString()}`);
-      if (!res.ok) throw new Error('Could not load the board.');
-      setData((await res.json()) as BoardPayload);
+      const payload = (await res.json()) as BoardPayload & { error?: string };
+      if (!res.ok) throw new Error(payload.error ?? 'Could not load the board.');
+      setData(payload);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the board.');
     }
-  }, [locationOverride, timeOverride]);
+  }, [demo, openFolder, situation]);
 
   useEffect(() => {
     void load();
@@ -141,7 +198,10 @@ export default function BoardPage() {
   }, []);
 
   const layout = data?.layout;
-  const capacity = layout ? layout.grid.cols * layout.grid.rows : 12;
+
+  // Called before the loading return, so the hook order never changes. The
+  // fallback only stands in for the frame before the board's own data lands.
+  const { ref: gridRef, gap: measuredGap } = useButtonGap(layout?.buttonScale ?? 0.9);
 
   const currentPage = useMemo(
     () => (data && openFolder ? (data.pages.find((p) => p.id === openFolder) ?? null) : null),
@@ -230,30 +290,68 @@ export default function BoardPage() {
     [],
   );
 
-  const addWord = useCallback(
-    async (folderId: string, term: string) => {
-      const clean = term.trim();
-      if (!clean) return;
+  /**
+   * Add a button to the open folder, or create a new folder on the board.
+   * A word with no usable picture is refused rather than added blank.
+   */
+  const addThing = useCallback(
+    async (request: AddRequest) => {
       setBusy(true);
       setActionError(null);
       try {
+        const body =
+          request.kind === 'folder'
+            ? { create: 'folder', name: request.label }
+            : {
+                folderId: openFolder,
+                term: request.label,
+                role: request.role,
+                imageUrl: request.imageUrl,
+                // Added while somewhere, so it belongs to that place. Add "Liam"
+                // at school and he comes back on the next visit to school.
+                location: demo.location,
+              };
+
         const res = await fetch('/api/folders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folderId, term: clean }),
+          body: JSON.stringify(body),
         });
-        const body = (await res.json()) as { error?: string };
-        if (!res.ok) throw new Error(body.error ?? 'Could not add that word.');
-        setNewWord('');
+        const payload = (await res.json()) as { error?: string; folderId?: string };
+        if (!res.ok) throw new Error(payload.error ?? 'Could not add that.');
+
         setOverlay({ kind: 'none' });
         await load();
+        // Drop straight into a folder that was just made, so it is obvious where
+        // it went and what to put in it.
+        if (request.kind === 'folder' && payload.folderId) {
+          setOpenFolder(payload.folderId);
+      setCorePage(0);
+        }
       } catch (e) {
-        setActionError(e instanceof Error ? e.message : 'Could not add that word.');
+        setActionError(e instanceof Error ? e.message : 'Could not add that.');
       } finally {
         setBusy(false);
       }
     },
-    [load],
+    [demo.location, load, openFolder],
+  );
+
+  /**
+   * Set or clear the typed activity. It refills the same four folders; it does
+   * not add one, so the board keeps its shape.
+   */
+  const applySituation = useCallback(
+    async (next: string | null) => {
+      setBusy(true);
+      setActionError(null);
+      setSituation(next);
+      setOpenFolder(null);
+      setCorePage(0);
+      setOverlay({ kind: 'none' });
+      setBusy(false);
+    },
+    [],
   );
 
   const removeFolder = useCallback(
@@ -267,7 +365,7 @@ export default function BoardPage() {
         const body = (await res.json()) as { error?: string };
         if (!res.ok) throw new Error(body.error ?? 'Could not remove that folder.');
         setOpenFolder(null);
-        setPageIndex(0);
+      setCorePage(0);
         setOverlay({ kind: 'none' });
         await load();
       } catch (e) {
@@ -314,35 +412,95 @@ export default function BoardPage() {
     );
   }
 
-  // Two pinned tiles at most: go back inside a folder, new situation on the home
-  // board, plus a next-page tile when the content overflows.
-  // Pinned tiles in the grid: go back or new situation, plus the add button that
-  // every open folder carries.
-  const pinned = currentPage ? 2 : 1;
-  const content: (ApiTile | FolderEntry)[] = currentPage ? currentPage.tiles : folders;
-  const withoutNext = Math.max(1, capacity - pinned);
-  const needsNext = content.length > withoutNext;
-  const perPage = needsNext ? Math.max(1, withoutNext - 1) : withoutNext;
-  const totalPages = Math.max(1, Math.ceil(content.length / perPage));
-  const safePage = Math.min(pageIndex, totalPages - 1);
-  const slice = content.slice(safePage * perPage, safePage * perPage + perPage);
-
-  const savedBoards = folders.filter((f) => f.boardId != null);
+  const pictures = data.pictures ?? {};
+  const pictureFor = (cell: CoreCell): string => {
+    if (cell.kind === 'action') {
+      return cell.action === 'back' ? NAV_ICONS.back : NAV_ICONS.next;
+    }
+    if (cell.kind === 'folder') {
+      const folder = CORE_FOLDERS[cell.folderId ?? ''];
+      if (folder?.icon) return folder.icon;
+      const first = folder?.words[0];
+      return first ? (pictures[first.label.toLowerCase()] ?? NAV_ICONS.folder) : NAV_ICONS.folder;
+    }
+    return pictures[cell.label.toLowerCase()] ?? '';
+  };
 
   /**
-   * The core block is always exactly seven columns, whatever the grid below is
-   * set to. Its tiles are kept the same size as the grid's by giving the block
-   * the width of seven of the grid's tracks and centring it, rather than
-   * stretching seven words across more columns and leaving holes in the middle.
+   * What fills the three rows: a fixed page normally, or the pinned core row
+   * plus that folder's words when a core folder is open. A dynamic folder never
+   * touches these rows; it only swaps the strip underneath.
    */
-  const CORE_COLS = 7;
-  const coreWidth =
-    layout.grid.cols === CORE_COLS
-      ? '100%'
-      : `calc((100% - ${(layout.grid.cols - 1) * layout.gapPx}px) * ${CORE_COLS} / ${layout.grid.cols} + ${(CORE_COLS - 1) * layout.gapPx}px)`;
+  const coreFolderId = openFolder?.startsWith('core:') ? openFolder.slice(5) : null;
+  const coreFolder = coreFolderId ? CORE_FOLDERS[coreFolderId] : undefined;
+  const dynamicFolder = openFolder?.startsWith('folder:')
+    ? data.pages.find((p) => p.id === openFolder)
+    : undefined;
+
+  const fixedCells = coreFolder ? layOutFolder(coreFolder.words) : layOutPage(corePage);
+
+  // A dynamic folder's words arrive with their pictures already attached.
+  if (dynamicFolder) {
+    for (const tile of dynamicFolder.tiles) pictures[tile.label.toLowerCase()] = tile.imageUrl;
+  }
+
+  // One grid, seven wide, filling the screen. The core rows and the strip
+  // underneath share the same columns so their buttons line up exactly.
+  const gridColumns = `repeat(${CORE_COLUMNS}, minmax(0, 1fr))`;
+
+  // Both grids take the same gap, so a button in the strip is the same size as
+  // one in the rows above. The stored gap stands in only until the first
+  // measurement lands.
+  const tileGap = measuredGap ?? layout.gapPx;
+
+  /** Everything a press on the fixed board can mean. */
+  const onFixedCell = (cell: CoreCell) => {
+    if (cell.kind === 'folder') {
+      if (editMode) {
+        setOverlay({
+          kind: 'folderEdit',
+          folderId: `core:${cell.folderId}`,
+          folderTitle: cell.label,
+        });
+        return;
+      }
+      setOpenFolder(`core:${cell.folderId}`);
+      return;
+    }
+
+    if (cell.kind === 'action') {
+      // Inside a folder, back comes out of it. On a page it turns back one page,
+      // and paging stops at the ends rather than wrapping.
+      if (cell.action === 'back') {
+        if (coreFolder) setOpenFolder(null);
+        else setCorePage((p) => Math.max(0, p - 1));
+      } else if (cell.action === 'next') {
+        setCorePage((p) => Math.min(CORE_PAGES.length - 1, p + 1));
+      }
+      return;
+    }
+
+    void onWordTile({
+      term: cell.label,
+      label: cell.label,
+      role: cell.role,
+      imageUrl: pictureFor(cell),
+      kind: 'word',
+    });
+  };
+
+  /** Back is dead on page one, next on the last page. */
+  const disabledAction = (cell: CoreCell): boolean => {
+    if (cell.kind !== 'action') return false;
+    if (cell.action === 'back') return !coreFolder && corePage === 0;
+    if (cell.action === 'next') return Boolean(coreFolder) || corePage === CORE_PAGES.length - 1;
+    return false;
+  };
 
   return (
-    <main className="safe-top safe-bottom flex h-dvh flex-col gap-2 p-2">
+    <main
+      className={`safe-top safe-bottom flex h-dvh flex-col gap-2 p-2${editMode ? ' is-editing' : ''}`}
+    >
       <SentenceBar
         words={sentence}
         speaking={speaking}
@@ -354,18 +512,22 @@ export default function BoardPage() {
       />
 
       {editMode ? (
-        <div
-          className="flex shrink-0 items-center gap-3 rounded-[8px] px-3 py-2 text-xs font-bold"
-          style={{ background: 'var(--teal)', color: 'var(--teal-ink)' }}
-        >
-          <span className="uppercase tracking-[0.06em]">Edit mode</span>
-          <span className="font-semibold opacity-90">
-            Tap any button to change its picture or upload a photo.
+        <div className="editbanner">
+          <span className="flex-1">
+            Editing{currentPage ? ` — ${currentPage.title}` : ''} — tap any button to change it
           </span>
           <button
             type="button"
+            onClick={() => setOverlay({ kind: 'add' })}
+            className="min-h-[36px] rounded-full border px-3 text-xs font-bold"
+            style={{ borderColor: 'rgba(255,255,255,.55)' }}
+          >
+            + Add
+          </button>
+          <button
+            type="button"
             onClick={() => setEditMode(false)}
-            className="ml-auto min-h-[32px] rounded-full border px-3"
+            className="min-h-[36px] rounded-full border px-3 text-xs font-bold"
             style={{ borderColor: 'rgba(255,255,255,.55)' }}
           >
             Done
@@ -383,63 +545,55 @@ export default function BoardPage() {
         stay one in from each edge whatever the button size.
       */}
       <div className="board-panel flex min-h-0 flex-1 flex-col gap-2 p-2">
+        {/*
+          The fixed board. Seven columns wide whatever the grid below is set to,
+          and centred, so its buttons come out exactly the same size as the ones
+          underneath rather than stretching to fill a wider row.
+        */}
         <div
-          className="tile-grid mx-auto w-full shrink-0"
-          style={{
-            gridTemplateColumns: `repeat(${CORE_COLS}, minmax(0, 1fr))`,
-            gap: `${layout.gapPx}px`,
-            width: coreWidth,
-          }}
+          className="tile-grid w-full shrink-0"
+          style={{ gridTemplateColumns: gridColumns, gap: `${layout.gapPx}px` }}
         >
-          {data.coreRows.flatMap((row, rowIndex) =>
-            row.map((tile) => (
+          {fixedCells.map((cell, index) =>
+            cell ? (
               <Tile
-                key={`${rowIndex}-${tile.term}`}
-                label={tile.label}
-                imageUrl={tile.imageUrl}
-                role={tile.role}
+                key={`${cell.label}-${index}`}
+                label={cell.label}
+                imageUrl={pictureFor(cell)}
+                role={cell.role}
+                variant={cell.kind === 'folder' ? 'folder' : 'word'}
                 iconScale={layout.iconScale}
-                editable={editMode}
-                onActivate={() => onWordTile(tile)}
+                editable={editMode && cell.kind === 'word'}
+                disabled={disabledAction(cell)}
+                onActivate={() => onFixedCell(cell)}
               />
-            )),
+            ) : (
+              <span key={`gap-${index}`} aria-hidden="true" />
+            ),
           )}
         </div>
 
         <span aria-hidden="true" className="board-rule shrink-0" />
 
-        {/* The adjustable grid. Rows are not forced to a height: every tile keeps
-            its aspect ratio and the rows follow from that. */}
+        {/*
+          The strip underneath. Normally the situation button and the four
+          dynamic folders; opening one of those swaps this strip for its words
+          and leaves the three rows above completely alone.
+        */}
         <div
-          className="tile-grid"
-          style={{
-            gridTemplateColumns: `repeat(${layout.grid.cols}, minmax(0, 1fr))`,
-            gap: `${layout.gapPx}px`,
-          }}
+          className="tile-grid w-full shrink-0"
+          style={{ gridTemplateColumns: gridColumns, gap: `${layout.gapPx}px` }}
         >
-          {currentPage ? (
-            <Tile
-              label="go back"
-              imageUrl={NAV_ICONS.back}
-              variant="nav"
-              iconScale={layout.iconScale}
-              onActivate={() => {
-                setOpenFolder(null);
-                setPageIndex(0);
-              }}
-            />
-          ) : (
-            <Tile
-              label="new situation"
-              imageUrl={NAV_ICONS.scenario}
-              variant="scenario"
-              iconScale={layout.iconScale}
-              onActivate={() => setOverlay({ kind: 'scenario' })}
-            />
-          )}
-
-          {currentPage
-            ? (slice as ApiTile[]).map((tile, index) => (
+          {dynamicFolder ? (
+            <>
+              <Tile
+                label="back"
+                imageUrl={NAV_ICONS.back}
+                role="determiner"
+                iconScale={layout.iconScale}
+                onActivate={() => setOpenFolder(null)}
+              />
+              {dynamicFolder.tiles.map((tile, index) => (
                 <Tile
                   key={`${tile.term}-${index}`}
                   label={tile.label}
@@ -447,75 +601,63 @@ export default function BoardPage() {
                   role={tile.role}
                   iconScale={layout.iconScale}
                   editable={editMode}
-                  onActivate={() => onWordTile(tile)}
+                  onActivate={() => void onWordTile(tile)}
                 />
-              ))
-            : (slice as FolderEntry[]).map((folder, index) => (
+              ))}
+            </>
+          ) : (
+            <>
+              <Tile
+                label="situation"
+                imageUrl={NAV_ICONS.scenario}
+                variant="scenario"
+                iconScale={layout.iconScale}
+                onActivate={() => setOverlay({ kind: 'scenario' })}
+              />
+              {data.pages.map((page) => (
                 <Tile
-                  key={`${folder.id}-${index}`}
-                  label={folder.title}
-                  imageUrl={folder.cover}
+                  key={page.id}
+                  label={page.title}
+                  imageUrl={page.tiles[0]?.imageUrl ?? ''}
                   variant="folder"
-                  role={folder.role}
+                  role={page.role}
                   iconScale={layout.iconScale}
                   editable={editMode}
                   onActivate={() => {
-                    // In edit mode a folder offers to be removed rather than opened.
                     if (editMode) {
                       setOverlay({
                         kind: 'folderEdit',
-                        folderId: folder.id,
-                        folderTitle: folder.title,
+                        folderId: page.id,
+                        folderTitle: page.title,
                       });
                       return;
                     }
-                    setOpenFolder(folder.id);
-                    setPageIndex(0);
-                    if (folder.boardId != null) {
-                      void fetch('/api/boards', {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ boardId: folder.boardId }),
-                      });
-                    }
+                    setOpenFolder(page.id);
                   }}
                 />
               ))}
-
-          {/* Every folder carries a way to add another picture to it. */}
-          {currentPage ? (
-            <Tile
-              label="add icon"
-              imageUrl={NAV_ICONS.add}
-              variant="nav"
-              iconScale={layout.iconScale}
-              onActivate={() =>
-                setOverlay({
-                  kind: 'addWord',
-                  folderId: currentPage.id,
-                  folderTitle: currentPage.title,
-                })
-              }
-            />
-          ) : null}
-
-          {needsNext ? (
-            <Tile
-              label={`more ${safePage + 1}/${totalPages}`}
-              imageUrl={NAV_ICONS.next}
-              variant="nav"
-              iconScale={layout.iconScale}
-              onActivate={() => setPageIndex((p) => (p + 1) % totalPages)}
-            />
-          ) : null}
+            </>
+          )}
         </div>
       </div>
 
       <p className="shrink-0 px-1 text-[11px]" style={{ color: 'var(--on-chrome-soft)' }}>
-        {currentPage ? currentPage.title : `${data.timeBucket} board`}
-        {data.location ? ` · ${data.location}` : ''}
+        {currentPage ? `${currentPage.title} · ` : ''}
+        {data.contextLabel}
+        {data.generated ? '' : ' · generic words, no API key'}
         {voiceNote ? ` · ${voiceNote}` : ''}
       </p>
+
+      <DemoControls
+        state={demo}
+        actualBucket={timeOfDay()}
+        busy={busy}
+        onChange={(next) => {
+          setDemo(next);
+          setOpenFolder(null);
+      setCorePage(0);
+        }}
+      />
 
       {drawerOpen ? (
         <CaregiverDrawer
@@ -528,24 +670,14 @@ export default function BoardPage() {
       {overlay.kind === 'scenario' ? (
         <ScenarioSheet
           recommended={data.recommended}
-          onClose={() => setOverlay({ kind: 'none' })}
-          onSaved={() => {
+          current={situation}
+          busy={busy}
+          error={actionError}
+          onPick={(next) => void applySituation(next)}
+          onClear={() => void applySituation(null)}
+          onClose={() => {
+            setActionError(null);
             setOverlay({ kind: 'none' });
-            void load();
-          }}
-          onEditPicture={(term, role, onPicked) =>
-            setOverlay({ kind: 'picture', term, role, onPicked })
-          }
-          demo={{
-            timeBucket: timeOverride,
-            location: locationOverride,
-            actualBucket: timeOfDay(),
-            onChange: ({ timeBucket, location }) => {
-              setTimeOverride(timeBucket);
-              setLocationOverride(location);
-              setOpenFolder(null);
-              setPageIndex(0);
-            },
           }}
         />
       ) : null}
@@ -554,10 +686,7 @@ export default function BoardPage() {
         <PictureSheet
           term={overlay.term}
           role={overlay.role}
-          onClose={() =>
-            // Coming back from the review step, return to the describe sheet.
-            setOverlay(overlay.onPicked ? { kind: 'scenario' } : { kind: 'none' })
-          }
+          onClose={() => setOverlay({ kind: 'none' })}
           onPicked={(candidate) => {
             overlay.onPicked?.(candidate);
             if (!overlay.onPicked) void load();
@@ -565,48 +694,18 @@ export default function BoardPage() {
         />
       ) : null}
 
-      {overlay.kind === 'addWord' ? (
-        <Sheet
-          title={`Add a picture to ${overlay.folderTitle}`}
-          onClose={() => setOverlay({ kind: 'none' })}
-        >
-          <p className="text-sm font-semibold" style={{ color: '#6c727b' }}>
-            Type the word. A picture is found for it and added to this folder.
-          </p>
-          <form
-            className="flex flex-wrap gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void addWord(overlay.folderId, newWord);
-            }}
-          >
-            <input
-              className="sheet__field flex-1"
-              value={newWord}
-              onChange={(event) => setNewWord(event.target.value)}
-              placeholder="dog"
-              maxLength={40}
-              autoFocus
-              aria-label="Word to add"
-            />
-            <button
-              type="submit"
-              className="min-h-[52px] rounded-[10px] px-5 font-bold disabled:opacity-50"
-              style={{ background: 'var(--teal)', color: 'var(--teal-ink)' }}
-              disabled={busy || !newWord.trim()}
-            >
-              {busy ? 'Adding...' : 'Add'}
-            </button>
-          </form>
-          {actionError ? (
-            <p
-              className="rounded-[10px] p-3 text-sm font-bold"
-              style={{ background: '#fdeae7', color: '#a62f1e' }}
-            >
-              {actionError}
-            </p>
-          ) : null}
-        </Sheet>
+      {overlay.kind === 'add' ? (
+        <AddThingSheet
+          folderTitle={currentPage?.title ?? null}
+          canAddButton={Boolean(currentPage)}
+          busy={busy}
+          error={actionError}
+          onAdd={(request) => void addThing(request)}
+          onClose={() => {
+            setActionError(null);
+            setOverlay({ kind: 'none' });
+          }}
+        />
       ) : null}
 
       {overlay.kind === 'folderEdit' ? (
@@ -622,7 +721,7 @@ export default function BoardPage() {
               className="chip"
               onClick={() => {
                 setOpenFolder(overlay.folderId);
-                setPageIndex(0);
+      setCorePage(0);
                 setOverlay({ kind: 'none' });
               }}
             >
@@ -650,46 +749,35 @@ export default function BoardPage() {
       ) : null}
 
       {overlay.kind === 'saved' ? (
-        <Sheet title="Saved boards" onClose={() => setOverlay({ kind: 'none' })}>
-          {savedBoards.length === 0 ? (
-            <p className="text-sm font-semibold" style={{ color: '#6c727b' }}>
-              No situations saved yet. Use the teal new situation button on the board.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {savedBoards.map((board) => (
-                <li
-                  key={board.id}
-                  className="flex items-center gap-3 rounded-[10px] border-2 p-2"
+        <Sheet title="All folders" onClose={() => setOverlay({ kind: 'none' })}>
+          <p className="text-sm font-semibold" style={{ color: '#6c727b' }}>
+            Every folder on the board, by name. On the board itself each one sits
+            beside the words it extends, so it is found from a word already known
+            rather than hunted for in a list.
+          </p>
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {Object.entries(CORE_FOLDERS).map(([id, folder]) => (
+              <li key={id}>
+                <button
+                  type="button"
+                  className="w-full rounded-[10px] border-2 p-3 text-left font-bold"
                   style={{ borderColor: '#cfcfc4', background: '#fff' }}
+                  onClick={() => {
+                    setOpenFolder(`core:${id}`);
+                    setOverlay({ kind: 'none' });
+                  }}
                 >
-                  {board.cover ? (
-                    <img src={board.cover} alt="" className="h-10 w-10 object-contain" />
-                  ) : null}
-                  <span className="flex-1 truncate font-bold">{board.title}</span>
-                  <button
-                    type="button"
-                    className="chip"
-                    onClick={() => {
-                      setOpenFolder(board.id);
-                      setPageIndex(0);
-                      setOverlay({ kind: 'none' });
-                    }}
+                  {folder.name}
+                  <span
+                    className="block text-xs font-semibold"
+                    style={{ color: '#6c727b' }}
                   >
-                    Open
-                  </button>
-                  <button
-                    type="button"
-                    className="min-h-[44px] rounded-full border px-3 text-sm font-bold"
-                    style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
-                    onClick={() => void deleteBoard(board.boardId!)}
-                  >
-                    Delete
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+                    {folder.words.length} words
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </Sheet>
       ) : null}
 
@@ -704,7 +792,7 @@ export default function BoardPage() {
               <p className="sheet__label">Most said sentences</p>
               {stats.topSentences.length === 0 ? (
                 <p className="text-sm" style={{ color: '#6c727b' }}>
-                  No full sentences yet. Build one and press say it.
+                  No full sentences yet. Build one and tap the sentence bar to say it.
                 </p>
               ) : (
                 <ol className="flex flex-col gap-1 text-sm font-semibold">

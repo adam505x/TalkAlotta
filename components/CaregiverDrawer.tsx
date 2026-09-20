@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { HoldButton } from '@/components/HoldButton';
 
 /**
  * Caregiver mode, as a drawer from the left.
@@ -68,13 +69,8 @@ const ICONS: Record<CaregiverAction, React.ReactNode> = {
 
 const ITEMS: { id: CaregiverAction; label: string; blurb: string }[] = [
   { id: 'dashboard', label: 'Dashboard', blurb: 'Most said sentences and words' },
-  {
-    id: 'edit-boards',
-    label: 'Edit boards',
-    blurb: 'Change pictures, remove folders, add words',
-  },
-  { id: 'add-image', label: 'Add image', blurb: 'Upload your own photo for a word' },
   { id: 'saved-boards', label: 'Saved boards', blurb: 'Situations already described' },
+  { id: 'add-image', label: 'Add image', blurb: 'Upload your own photo for a word' },
   { id: 'settings', label: 'Settings', blurb: 'Size, spacing, eyesight, voice' },
 ];
 
@@ -118,14 +114,43 @@ export function CaregiverDrawer({
           The board stays visible, so you can make changes while looking at it.
         </p>
 
+        {/*
+          Edit mode is gated behind a hold rather than a tap. The menu itself
+          opens freely, because browsing it is harmless, but a communicator
+          tapping around should not be able to land in a state where their
+          presses change the board instead of speaking.
+        */}
+        <section
+          className="flex flex-col gap-2 rounded-[10px] border-2 p-3"
+          style={{ borderColor: '#cfcfc4', background: '#fff' }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-base font-bold">Edit mode</span>
+            <span className={`pill${editMode ? ' pill--on' : ''}`}>{editMode ? 'On' : 'Off'}</span>
+          </div>
+          <p className="text-xs font-semibold" style={{ color: '#6c727b' }}>
+            Change a picture, add a button or folder, or remove one.
+          </p>
+          {editMode ? (
+            <button
+              type="button"
+              className="min-h-[52px] rounded-[9px] border-2 font-bold"
+              style={{ borderColor: '#cfcfc4', background: '#fff', color: 'var(--ink)' }}
+              onClick={() => onAction('edit-boards')}
+            >
+              Turn editing off
+            </button>
+          ) : (
+            <HoldButton onComplete={() => onAction('edit-boards')}>Hold to turn on</HoldButton>
+          )}
+        </section>
+
         {ITEMS.map((item) => {
-          const pressed = item.id === 'edit-boards' && editMode;
           return (
             <button
               key={item.id}
               type="button"
               className="drawer-item"
-              aria-pressed={item.id === 'edit-boards' ? editMode : undefined}
               onClick={() => {
                 if (item.id === 'settings') {
                   router.push('/settings');
@@ -136,10 +161,7 @@ export function CaregiverDrawer({
             >
               <span style={{ color: 'var(--teal)' }}>{ICONS[item.id]}</span>
               <span className="flex min-w-0 flex-col">
-                <span className="text-base font-bold leading-tight">
-                  {item.label}
-                  {pressed ? ' · on' : ''}
-                </span>
+                <span className="text-base font-bold leading-tight">{item.label}</span>
                 <span className="text-xs font-semibold leading-snug" style={{ color: '#6c727b' }}>
                   {item.blurb}
                 </span>

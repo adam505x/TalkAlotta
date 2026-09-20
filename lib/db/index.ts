@@ -24,6 +24,13 @@ import * as schema from './schema';
  */
 const DB_FILE = (process.env.DATABASE_FILE || 'aac.db').replace(/[^A-Za-z0-9._-]/g, '');
 
+/** Adds a column to an existing table, if it is not there already. */
+function addColumn(sqlite: Database.Database, table: string, column: string, ddl: string) {
+  const columns = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (columns.some((c) => c.name === column)) return;
+  sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+}
+
 function createTables(sqlite: Database.Database) {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
@@ -112,8 +119,18 @@ function createTables(sqlite: Database.Database) {
       folder_id TEXT NOT NULL,
       term TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'object',
+      location TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS context_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cache_key TEXT NOT NULL,
+      context TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS context_folders_key_idx ON context_folders(cache_key);
 
     CREATE TABLE IF NOT EXISTS uploads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,25 +174,16 @@ function createTables(sqlite: Database.Database) {
     );
   `);
 
-  addMissingColumns(sqlite);
+  // Columns added after a database was first created. CREATE TABLE IF NOT EXISTS
+  // will not add them to an existing file, so they are applied separately.
+  // Nullable additions only: anything needing a backfill or a rewrite is a real
+  // migration and does not belong in a startup path.
+  addColumn(sqlite, 'profile', 'name', 'TEXT');
+  addColumn(sqlite, 'profile', 'button_scale_pct', 'INTEGER');
+  addColumn(sqlite, 'folder_words', 'location', 'TEXT');
 
   // The profile row always exists so reads never have to special-case null.
   sqlite.exec('INSERT OR IGNORE INTO profile (id) VALUES (1)');
-}
-
-/**
- * CREATE TABLE IF NOT EXISTS cannot add a column to a file that already exists,
- * so a column added after someone's database was first created needs saying
- * again here. Nullable additions only: anything that needs backfilling or a
- * rewrite is a real migration and does not belong in a startup path.
- */
-function addMissingColumns(sqlite: Database.Database) {
-  const columns = new Set(
-    sqlite.prepare('PRAGMA table_info(profile)').all().map((row) => (row as { name: string }).name),
-  );
-  if (!columns.has('name')) sqlite.exec('ALTER TABLE profile ADD COLUMN name TEXT');
-  if (!columns.has('button_scale_pct'))
-    sqlite.exec('ALTER TABLE profile ADD COLUMN button_scale_pct INTEGER');
 }
 
 declare global {

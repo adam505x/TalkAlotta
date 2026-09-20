@@ -17,13 +17,49 @@ export const dynamic = 'force-dynamic';
  * in the first place.
  */
 
-/** Add a word to a folder. */
+/**
+ * Add a word to a folder, or create a new empty folder.
+ *
+ * `{ create: 'folder', name }` makes a folder; anything else adds a word.
+ */
 export async function POST(request: Request) {
-  let body: { folderId?: unknown; term?: unknown; role?: unknown };
+  let body: {
+    folderId?: unknown;
+    term?: unknown;
+    role?: unknown;
+    create?: unknown;
+    name?: unknown;
+    location?: unknown;
+    imageUrl?: unknown;
+  };
   try {
     body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: 'Expected JSON.' }, { status: 400 });
+  }
+
+  if (body.create === 'folder') {
+    const name = String(body.name ?? '').trim();
+    if (!name) return NextResponse.json({ error: 'The folder needs a name.' }, { status: 400 });
+    if (name.length > 40) {
+      return NextResponse.json({ error: 'That name is too long.' }, { status: 400 });
+    }
+    const clash = db
+      .select()
+      .from(schema.boards)
+      .where(eq(schema.boards.name, name))
+      .get();
+    if (clash) {
+      return NextResponse.json({ error: `There is already a folder called "${name}".` }, { status: 409 });
+    }
+    // A folder is a board with no words in it yet. Words get added the same way
+    // as for any other folder, so there is one code path rather than two.
+    const created = db
+      .insert(schema.boards)
+      .values({ name, scenario: '', intent: 'folder' })
+      .returning({ id: schema.boards.id })
+      .get();
+    return NextResponse.json({ ok: true, folderId: `board:${created.id}`, name });
   }
 
   const folderId = String(body.folderId ?? '').trim();
@@ -39,14 +75,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'That word is too long.' }, { status: 400 });
   }
 
-  // Find a picture first: a word with no picture is not worth putting on a board.
-  const tile = await resolveWord(term, role);
-  if (!tile) {
-    return NextResponse.json(
-      { error: `No picture found for "${term}". Try another word.` },
-      { status: 404 },
-    );
-  }
+  /**
+   * A picture the caregiver picked wins outright: the board shows their choice
+   * rather than the library's first guess, which for a name is usually something
+   * unrelated. Applied only once the word is known to be addable, so a rejected
+   * add leaves everything exactly as it was.
+   */
+  const pinChosenPicture = () => {
+    const imageUrl = String(body.imageUrl ?? '').trim();
+    if (!imageUrl) return;
+    db.insert(schema.symbolOverrides)
+      .values({ term, imageUrl, source: 'chosen' })
+      .onConflictDoUpdate({
+        target: schema.symbolOverrides.term,
+        set: { imageUrl, source: 'chosen' },
+      })
+      .run();
+    db.delete(schema.wordSymbols).where(eq(schema.wordSymbols.term, term)).run();
+  };
 
   if (folderId.startsWith('board:')) {
     // A saved situation folder keeps its words in board_items.
@@ -61,6 +107,14 @@ export async function POST(request: Request) {
       .all();
     if (existing.some((i) => i.term === term)) {
       return NextResponse.json({ error: `"${term}" is already in this folder.` }, { status: 409 });
+    }
+    pinChosenPicture();
+    const tile = await resolveWord(term, role);
+    if (!tile) {
+      return NextResponse.json(
+        { error: `No picture found for "${term}". Try another word.` },
+        { status: 404 },
+      );
     }
     db.insert(schema.boardItems)
       .values({
@@ -77,7 +131,11 @@ export async function POST(request: Request) {
         confidence: tile.confidence ?? null,
       })
       .run();
-  } else {
+    recordFeedback(term, 'accepted', { id: tile.symbolId, imageUrl: tile.imageUrl });
+    return NextResponse.json({ ok: true, term, imageUrl: tile.imageUrl });
+  }
+
+  {
     const already = db
       .select()
       .from(schema.folderWords)
@@ -86,12 +144,22 @@ export async function POST(request: Request) {
     if (already) {
       return NextResponse.json({ error: `"${term}" is already in this folder.` }, { status: 409 });
     }
-    db.insert(schema.folderWords).values({ folderId, term, role }).run();
+    pinChosenPicture();
+    const tile = await resolveWord(term, role);
+    if (!tile) {
+      return NextResponse.json(
+        { error: `No picture found for "${term}". Try another word.` },
+        { status: 404 },
+      );
+    }
+
+    // Pinned to where it was added, so it returns there and stays out of the way
+    // elsewhere. No location means it belongs everywhere.
+    const location = body.location ? String(body.location).trim().slice(0, 60) : null;
+    db.insert(schema.folderWords).values({ folderId, term, role, location }).run();
+    recordFeedback(term, 'accepted', { id: tile.symbolId, imageUrl: tile.imageUrl });
+    return NextResponse.json({ ok: true, term, imageUrl: tile.imageUrl });
   }
-
-  recordFeedback(term, 'accepted', { id: tile.symbolId, imageUrl: tile.imageUrl });
-
-  return NextResponse.json({ ok: true, term, imageUrl: tile.imageUrl });
 }
 
 /**

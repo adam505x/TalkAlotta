@@ -38,24 +38,26 @@ interface Face {
 }
 
 const ROLE_FACES: Record<WordRole, Face> = {
-  core: { bg: 'var(--role-core-bg)', fg: 'var(--role-core-fg)' },
-  action: { bg: 'var(--role-action-bg)', fg: 'var(--role-action-fg)' },
-  object: { bg: 'var(--role-object-bg)', fg: 'var(--role-object-fg)' },
-  place: { bg: 'var(--role-place-bg)', fg: 'var(--role-place-fg)' },
-  feeling: { bg: 'var(--role-feeling-bg)', fg: 'var(--role-feeling-fg)' },
-  modifier: { bg: 'var(--role-modifier-bg)', fg: 'var(--role-modifier-fg)' },
+  pronoun: { bg: 'var(--role-pronoun-bg)', fg: 'var(--role-pronoun-fg)' },
+  verb: { bg: 'var(--role-verb-bg)', fg: 'var(--role-verb-fg)' },
+  noun: { bg: 'var(--role-noun-bg)', fg: 'var(--role-noun-fg)' },
+  adjective: { bg: 'var(--role-adjective-bg)', fg: 'var(--role-adjective-fg)' },
+  preposition: { bg: 'var(--role-preposition-bg)', fg: 'var(--role-preposition-fg)' },
+  question: { bg: 'var(--role-question-bg)', fg: 'var(--role-question-fg)' },
+  urgent: { bg: 'var(--role-urgent-bg)', fg: 'var(--role-urgent-fg)' },
+  adverb: { bg: 'var(--role-adverb-bg)', fg: 'var(--role-adverb-fg)' },
+  conjunction: { bg: 'var(--role-conjunction-bg)', fg: 'var(--role-conjunction-fg)' },
+  determiner: { bg: 'var(--role-determiner-bg)', fg: 'var(--role-determiner-fg)' },
   affirm: { bg: 'var(--role-affirm-bg)', fg: 'var(--role-affirm-fg)' },
-  negate: { bg: 'var(--role-negate-bg)', fg: 'var(--role-negate-fg)' },
 };
 
 /**
- * Only navigation and the new-situation button get a face of their own. A folder
- * is deliberately absent here so it falls through to its role colour.
+ * A folder is deliberately absent here: it takes the colour of the words inside
+ * it, so it sits in the same colour block as the words it extends, and is marked
+ * as a folder only by the tab on its top edge.
  */
 const VARIANT_FACES: Partial<Record<TileVariant, Face>> = {
-  nav: { bg: 'var(--role-nav-bg)', fg: 'var(--role-nav-fg)' },
-  scenario: { bg: 'var(--role-scenario-bg)', fg: 'var(--role-scenario-fg)' },
-  caregiver: { bg: 'var(--role-nav-bg)', fg: 'var(--role-nav-fg)' },
+  scenario: { bg: 'var(--teal)', fg: 'var(--teal-ink)' },
 };
 
 export const DEBOUNCE_MS = 350;
@@ -76,7 +78,7 @@ export interface TileProps {
 export function Tile({
   label,
   imageUrl,
-  role = 'object',
+  role = 'noun',
   variant = 'word',
   iconScale = 1,
   onActivate,
@@ -93,7 +95,7 @@ export function Tile({
     onActivate();
   }, [onActivate]);
 
-  const face = VARIANT_FACES[variant] ?? ROLE_FACES[role] ?? ROLE_FACES.object;
+  const face = VARIANT_FACES[variant] ?? ROLE_FACES[role] ?? ROLE_FACES.noun;
   const isFolder = variant === 'folder';
 
   const describedAs =

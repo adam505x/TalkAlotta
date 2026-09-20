@@ -1,18 +1,16 @@
 import { desc, eq } from 'drizzle-orm';
 import { db, schema } from './db';
-import {
-  CORE_ROWS,
-  FOLDER_LABELS,
-  FOLDER_ORDER,
-  LOCATION_WORDS,
-  STARTER_VOCABULARY,
-  TIME_OF_DAY_WORDS,
-  timeOfDay,
-  type LocationBucket,
-  type TimeBucket,
-  type WordRole,
-} from './core-words';
+import { builtInPicture, type WordRole } from './core-words';
+import { fixedBoardTerms } from './core-board';
 import { matchConcept } from './symbol-search';
+import { describeContext, type MomentContext } from './context';
+import {
+  ALWAYS_PEOPLE,
+  FOLDER_IDS,
+  FOLDER_LABELS,
+  generateFolders,
+  type FolderId,
+} from './generate-folders';
 
 /**
  * Board assembly.
@@ -26,14 +24,13 @@ import { matchConcept } from './symbol-search';
  *    never move when the grid size changes, which is the whole point of a fixed
  *    position: muscle memory. yes and no live at opposite ends of that row.
  *
- *  - The grid itself holds folders of fixed vocabulary, which never move either.
+ *  - Below it sit exactly four folders: people, doing, things, describing. Every
+ *    situation decomposes into those four, so the folders themselves never move
+ *    or change in number. Only what is inside them changes.
  *
- *  - A described situation becomes its own folder on the main board. So the board
- *    stays predictable, and the moment-specific words live one tap inside a
- *    folder named after that moment. Describing a new situation adds a folder, it
- *    does not rearrange the board.
- *
- *  - Only the time-of-day folder changes by itself.
+ *  - What goes inside comes from the moment: the time of day, where they are, the
+ *    weather, and any activity that has been typed in. Somewhere specific gets
+ *    specific words; a restaurant offers a server and a menu, a park does not.
  */
 
 export interface Tile {
@@ -63,15 +60,6 @@ export interface BoardPage {
    */
   role: WordRole;
 }
-
-/** Folder colour follows what is inside it, not the fact that it is a folder. */
-const FOLDER_ROLES: Record<string, WordRole> = {
-  people: 'object',
-  actions: 'action',
-  feelings: 'feeling',
-  places: 'place',
-  describe: 'modifier',
-};
 
 /**
  * Resolves one fixed-vocabulary word to a picture, caching the result so the
@@ -163,43 +151,53 @@ async function resolveMany(words: { term: string; role: WordRole }[]): Promise<T
 }
 
 export interface AssembledBoard {
-  /** Three fixed rows. Never reordered, never paginated. */
-  coreRows: Tile[][];
+  /** Lowercased word to picture, for every cell currently on screen. */
+  pictures: Record<string, string>;
+  /** Always these four, in this order. Only their contents change. */
   pages: BoardPage[];
-  timeBucket: TimeBucket;
-  location: LocationBucket | null;
+  context: MomentContext;
+  contextLabel: string;
+  /** False when there is no API key and the words are a generic stand-in. */
+  generated: boolean;
 }
 
-export interface BoardContext {
-  /** Overrides the clock. Used by the demo controls to show time adaptation. */
-  timeBucket?: TimeBucket | null;
-  /** Where the communicator is. No override means no location folder. */
-  location?: LocationBucket | null;
+/** The most a folder ever shows at once. */
+const FOLDER_CAP = 6;
+
+/** The colour each folder's words take, following the Fitzgerald key. */
+const FOLDER_ROLE: Record<FolderId, WordRole> = {
+  people: 'pronoun',
+  actions: 'verb',
+  things: 'noun',
+  describing: 'adjective',
+};
+
+/**
+ * Words the caregiver added themselves, for this folder, that apply here.
+ *
+ * A word pinned to a location comes back every time they return to it and stays
+ * out of the way everywhere else. That is the learning half: add "Liam" at
+ * school and Liam is a school word from then on.
+ */
+function learnedWords(folderId: FolderId, location: string | null): { term: string; role: WordRole }[] {
+  const rows = db
+    .select()
+    .from(schema.folderWords)
+    .where(eq(schema.folderWords.folderId, folderId))
+    .all();
+
+  const here = (location ?? '').toLowerCase();
+  return rows
+    .filter((row) => !row.location || row.location.toLowerCase() === here)
+    .map((row) => ({ term: row.term, role: (row.role as WordRole) ?? FOLDER_ROLE[folderId] }));
 }
 
-export async function assembleMainBoard(context: BoardContext = {}): Promise<AssembledBoard> {
-  const bucket = context.timeBucket ?? timeOfDay();
-  const location = context.location ?? null;
+export async function assembleMainBoard(
+  context: MomentContext,
+  openFolder?: string | null,
+): Promise<AssembledBoard> {
+  const { words, generated } = await generateFolders(context);
 
-  // Fixed vocabulary folders.
-  const byFolder = new Map<string, { term: string; role: WordRole }[]>();
-  for (const word of STARTER_VOCABULARY) {
-    const list = byFolder.get(word.folder) ?? [];
-    list.push({ term: word.term, role: word.role });
-    byFolder.set(word.folder, list);
-  }
-
-  // Words the caregiver added to a built-in folder from the add button inside it.
-  // Folder ids arrive prefixed ("folder:people"); byFolder is keyed on the bare
-  // name, so strip the prefix before matching.
-  for (const extra of db.select().from(schema.folderWords).all()) {
-    const key = extra.folderId.replace(/^folder:/, '');
-    const list = byFolder.get(key) ?? [];
-    list.push({ term: extra.term, role: (extra.role as WordRole) ?? 'object' });
-    byFolder.set(key, list);
-  }
-
-  // Folders the caregiver has taken off the board. Hidden, not deleted.
   const hidden = new Set(
     db
       .select()
@@ -208,111 +206,66 @@ export async function assembleMainBoard(context: BoardContext = {}): Promise<Ass
       .map((row) => row.folderId),
   );
 
-  const folderPages: BoardPage[] = [];
+  const pages: BoardPage[] = [];
 
-  for (const folderId of FOLDER_ORDER) {
+  for (const folderId of FOLDER_IDS) {
     if (hidden.has(`folder:${folderId}`)) continue;
-    const words = byFolder.get(folderId);
-    if (!words) continue;
-    const tiles = await resolveMany(words);
-    if (tiles.length === 0) continue;
-    folderPages.push({
+
+    const role = FOLDER_ROLE[folderId];
+
+    // A caregiver's own words come first: they were added deliberately, and they
+    // are the ones that make the board this child's rather than anyone's.
+    const chosen: { term: string; role: WordRole }[] = [...learnedWords(folderId, context.location)];
+
+    if (folderId === 'people') {
+      for (const term of ALWAYS_PEOPLE) {
+        if (!chosen.some((c) => c.term === term)) chosen.push({ term, role });
+      }
+    }
+
+    for (const term of words[folderId] ?? []) {
+      if (chosen.some((c) => c.term === term)) continue;
+      chosen.push({ term, role });
+    }
+
+    // About five, never more than six. Past that a folder stops being something
+    // you can scan and becomes something you have to read.
+    const tiles = await resolveMany(chosen.slice(0, FOLDER_CAP));
+    pages.push({
       id: `folder:${folderId}`,
-      title: FOLDER_LABELS[folderId] ?? folderId,
+      title: FOLDER_LABELS[folderId],
       tiles,
-      role: FOLDER_ROLES[folderId] ?? 'object',
+      role,
     });
   }
 
-  // The one part of the board that shifts on its own: time of day.
-  const nowWords = (TIME_OF_DAY_WORDS[bucket] ?? []).map((term) => ({
-    term,
-    role: 'object' as WordRole,
-  }));
-  const nowTiles = hidden.has('folder:now') ? [] : await resolveMany(nowWords);
-  if (nowTiles.length > 0) {
-    folderPages.push({ id: 'folder:now', title: bucket, tiles: nowTiles, role: 'object' });
-  }
+  // The fixed board's LAYOUT is static data both sides share (lib/core-board.ts).
+  // The server's job is only to say what picture each of its words gets, so the
+  // page can draw the layout without every picture lookup going to the client.
+  const pictures: Record<string, string> = {};
+  const seen = new Set<string>();
+  const unique = fixedBoardTerms(openFolder).filter((t) => {
+    const key = t.term.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
-  // The other half of situational adaptation: where they are.
-  if (location && !hidden.has('folder:place')) {
-    const placeWords = (LOCATION_WORDS[location] ?? []).map((term) => ({
-      term,
-      role: 'object' as WordRole,
-    }));
-    const placeTiles = await resolveMany(placeWords);
-    if (placeTiles.length > 0) {
-      folderPages.push({ id: 'folder:place', title: location, tiles: placeTiles, role: 'place' });
-    }
-  }
+  const resolved = await Promise.all(
+    unique.map(async (entry) => {
+      const pinned = overrideTileFor(entry.term, entry.role);
+      if (pinned) return { term: entry.term, imageUrl: pinned.imageUrl };
 
-  // Saved situation boards, newest first, each as its own folder.
-  const saved = db.select().from(schema.boards).orderBy(desc(schema.boards.createdAt)).all();
-  for (const board of saved) {
-    if (hidden.has(`board:${board.id}`)) continue;
-    const items = db
-      .select()
-      .from(schema.boardItems)
-      .where(eq(schema.boardItems.boardId, board.id))
-      .orderBy(schema.boardItems.position)
-      .all();
-    if (items.length === 0) continue;
-    const tiles: Tile[] = items.map((i) => ({
-      term: i.term,
-      label: i.label,
-      role: (i.role as WordRole) ?? 'object',
-      imageUrl: i.imageUrl,
-      kind: 'word',
-      confidence: i.confidence ?? undefined,
-      license: i.license,
-      author: i.author,
-      source: i.source,
-      symbolId: i.symbolId,
-    }));
-    folderPages.push({ id: `board:${board.id}`, title: board.name, tiles, role: 'object' });
-  }
+      const builtIn = builtInPicture(entry.term);
+      if (builtIn) return { term: entry.term, imageUrl: builtIn };
 
-  /**
-   * The core block. A word with a built-in picture uses it as-is; the rest
-   * resolve from the library once and are cached like any other fixed word, so a
-   * caregiver override still wins.
-   */
-  const coreRows: Tile[][] = await Promise.all(
-    CORE_ROWS.map((row) =>
-      Promise.all(
-        row.map(async (entry): Promise<Tile> => {
-          // A caregiver's pinned picture wins even over a built-in one. Without
-          // this check, editing the picture for a hand-drawn core word saved the
-          // override and then went on showing the built-in drawing.
-          const pinned = overrideTileFor(entry.term, entry.role, entry.label);
-          if (pinned) return pinned;
-
-          if (entry.imageUrl) {
-            return {
-              term: entry.term,
-              label: entry.label,
-              role: entry.role,
-              imageUrl: entry.imageUrl,
-              kind: 'word',
-              confidence: 100,
-            };
-          }
-          const resolved = await resolveWord(entry.term, entry.role);
-          return (
-            resolved ?? {
-              term: entry.term,
-              label: entry.label,
-              role: entry.role,
-              imageUrl: '',
-              kind: 'word',
-            }
-          );
-        }),
-      ),
-    ),
+      const tile = await resolveWord(entry.term, entry.role);
+      return { term: entry.term, imageUrl: tile?.imageUrl ?? '' };
+    }),
   );
+  for (const r of resolved) pictures[r.term.toLowerCase()] = r.imageUrl;
 
-  return { coreRows, pages: folderPages, timeBucket: bucket, location };
+  return { pictures, pages, context, contextLabel: describeContext(context), generated };
 }
 
 export function touchBoard(boardId: number) {
