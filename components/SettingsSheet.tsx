@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { CountrySelect } from '@/components/ui/country-select';
 import { OptionGroup, OptionRow, sliderFill } from '@/components/ui/option-list';
 import { PaletteDots } from '@/components/ui/palette-dots';
-import { clearSpeechMemory, speak, unlockAudio } from '@/lib/speech';
+import { clearSpeechMemory, speak, unlockAudio, voicePreviewLine } from '@/lib/speech';
 import {
   BOARD_COLS,
   BOARD_ROWS,
@@ -191,7 +191,7 @@ export function SettingsSheet({
   const [loaded, setLoaded] = useState(false);
   const [stats, setStats] = useState<StatsPayload | null>(null);
 
-  const [name, setName] = useState<string | null>(null);
+  const [name, setName] = useState('');
   const [buttonScale, setButtonScale] = useState(BUTTON_SCALE_DEFAULT);
   const [tapErrorPx, setTapErrorPx] = useState<number | null>(null);
   const [vision, setVision] = useState<VisionCategory>('unknown');
@@ -221,7 +221,7 @@ export function SettingsSheet({
     ]);
     const payload = (await profileRes.json()) as ProfilePayload;
     const p = payload.profile;
-    setName(p.name);
+    setName(p.name ?? '');
     setButtonScale(p.buttonScale ?? BUTTON_SCALE_DEFAULT);
     setTapErrorPx(p.tapErrorPx);
     setVision(p.vision ?? 'unknown');
@@ -282,6 +282,7 @@ export function SettingsSheet({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          name: name.trim() || null,
           // Button size is the only layout control: the grid is locked at seven
           // by four, and the gap is whatever the button does not fill.
           buttonScale,
@@ -306,7 +307,7 @@ export function SettingsSheet({
     } finally {
       setSaving(false);
     }
-  }, [age, buttonScale, colorVision, gender, nationality, onSaved, vision]);
+  }, [age, buttonScale, colorVision, gender, name, nationality, onSaved, vision]);
 
   /**
    * Low vision and CVI set a floor under the button size (lib/sizing.ts). The
@@ -325,7 +326,7 @@ export function SettingsSheet({
     setButtonScale((current) => (current < sizeFloor ? sizeFloor : current));
   }, [sizeFloor]);
 
-  const who = name?.trim() || 'the board';
+  const who = name.trim() || 'the board';
 
   return (
     <div
@@ -345,7 +346,7 @@ export function SettingsSheet({
           <div className="min-w-0">
             <h2 className="type-title truncate">Settings</h2>
             <p className="type-footnote mt-0.5 truncate" style={{ color: 'var(--ink-soft)' }}>
-              {name?.trim() ? `How ${name.trim()}'s board looks and sounds` : 'How the board looks and sounds'}
+              {name.trim() ? `How ${name.trim()}'s board looks and sounds` : 'How the board looks and sounds'}
             </p>
           </div>
           <button
@@ -519,6 +520,25 @@ export function SettingsSheet({
 
             {loaded && tab === 'voice' ? (
               <>
+                {/* Setup asks for this on its first screen, and until now there
+                    was no way to correct it afterwards short of running setup
+                    again. It is on this tab because it is the word the voice
+                    actually says. */}
+                <Section
+                  title="Their name"
+                  blurb="Spoken when you tap Hear the voice, and used wherever the board talks about them."
+                >
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Josie"
+                    aria-label="The name of the person the board is for"
+                    autoComplete="off"
+                    className="field-text w-full"
+                  />
+                </Section>
+
                 <Section
                   title="The voice"
                   blurb="Worked out from age, gender and country. Change any of those and the voice is re-picked when you save. Loudness is set with the volume buttons on the side of the iPad."
@@ -539,7 +559,7 @@ export function SettingsSheet({
                       onClick={async () => {
                         unlockAudio();
                         setVoiceTried(true);
-                        await speak('Hello, my name is TalkAlotta.', { kind: 'sentence' });
+                        await speak(voicePreviewLine(name), { kind: 'sentence' });
                       }}
                     >
                       Hear the voice

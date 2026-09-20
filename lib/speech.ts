@@ -146,6 +146,23 @@ async function playClip(el: HTMLAudioElement, url: string): Promise<void> {
   await el.play();
 }
 
+/**
+ * The line the voice reads when a caregiver taps "Hear the voice".
+ *
+ * It speaks as the communicator, because that is whose voice is being chosen.
+ * Hearing "my name is Josie" in the voice Josie will actually use is the whole
+ * point of the preview; hearing the app introduce itself tells the caregiver
+ * nothing about whether it suits her.
+ *
+ * Falls back to the app's own name only when there is no name yet, which in
+ * setup means someone went back and cleared it, and in Settings means a profile
+ * that never ran setup.
+ */
+export function voicePreviewLine(name: string | null | undefined): string {
+  const who = (name ?? '').trim();
+  return `Hello, my name is ${who || 'TalkAlotta'}.`;
+}
+
 export interface SpeakResult {
   spoken: boolean;
   via: 'deepgram' | 'browser' | 'none';

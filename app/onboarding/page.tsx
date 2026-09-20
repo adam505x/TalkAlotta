@@ -18,7 +18,7 @@ import {
   suggestLayout,
   type VisionCategory,
 } from '@/lib/sizing';
-import { speak, unlockAudio } from '@/lib/speech';
+import { speak, unlockAudio, voicePreviewLine } from '@/lib/speech';
 import { COLOR_VISION_OPTIONS, type ColorVisionCategory } from '@/lib/color-vision';
 import { OptionGroup, OptionRow, sliderFill } from '@/components/ui/option-list';
 import { PaletteDots } from '@/components/ui/palette-dots';
@@ -585,22 +585,28 @@ export default function OnboardingPage() {
             <Button
               size="xl"
               className="w-full"
-              disabled={!name.trim()}
+              disabled={saving || !name.trim()}
               onClick={() => {
                 if (!name.trim()) return;
-                goto('profile_age');
+                void saveAndContinue({ name: name.trim() }, 'profile_age');
               }}
             >
               Continue
             </Button>
           }
         >
+          {/* Written the moment it is given, not held until the end.
+              Everything else asked here can be guessed at or left standing, but
+              the board speaks this name aloud, and a setup abandoned at any of
+              the next four questions used to lose it — leaving the voice
+              preview introducing the app instead of the person for good. */}
           <input
             type="text"
             value={name}
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && name.trim()) goto('profile_age');
+              if (event.key !== 'Enter' || !name.trim()) return;
+              void saveAndContinue({ name: name.trim() }, 'profile_age');
             }}
             placeholder="Josie"
             aria-label="Their name"
@@ -1039,7 +1045,7 @@ export default function OnboardingPage() {
               variant="secondary"
               onClick={async () => {
                 setVoiceTried(true);
-                await speak('Hello, my name is TalkAlotta.', { kind: 'sentence' });
+                await speak(voicePreviewLine(askedName), { kind: 'sentence' });
               }}
             >
               Hear the voice
