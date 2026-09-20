@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { HoldButton } from '@/components/HoldButton';
 
 /**
@@ -71,7 +70,7 @@ const ITEMS: { id: CaregiverAction; label: string; blurb: string }[] = [
   { id: 'dashboard', label: 'Dashboard', blurb: 'Most said sentences and words' },
   { id: 'saved-boards', label: 'Saved boards', blurb: 'Situations already described' },
   { id: 'add-image', label: 'Add image', blurb: 'Upload your own photo for a word' },
-  { id: 'settings', label: 'Settings', blurb: 'Size, spacing, eyesight, voice' },
+  { id: 'settings', label: 'Settings', blurb: 'Size, eyesight, colour, voice' },
 ];
 
 export function CaregiverDrawer({
@@ -83,8 +82,6 @@ export function CaregiverDrawer({
   onAction: (action: CaregiverAction) => void;
   editMode: boolean;
 }) {
-  const router = useRouter();
-
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -151,13 +148,7 @@ export function CaregiverDrawer({
               key={item.id}
               type="button"
               className="drawer-item"
-              onClick={() => {
-                if (item.id === 'settings') {
-                  router.push('/settings');
-                  return;
-                }
-                onAction(item.id);
-              }}
+              onClick={() => onAction(item.id)}
             >
               <span style={{ color: 'var(--teal)' }}>{ICONS[item.id]}</span>
               <span className="flex min-w-0 flex-col">

@@ -9,6 +9,7 @@ import { ScenarioSheet } from '@/components/ScenarioSheet';
 import { PictureSheet, type Candidate } from '@/components/PictureSheet';
 import { CaregiverDrawer, type CaregiverAction } from '@/components/CaregiverDrawer';
 import { AddThingSheet, type AddRequest } from '@/components/AddThingSheet';
+import { SettingsSheet } from '@/components/SettingsSheet';
 import { setSpeechVolume, speak, stopSpeaking, unlockAudio } from '@/lib/speech';
 import { NAV_ICONS, timeOfDay, type TimeBucket, type WordRole } from '@/lib/core-words';
 import {
@@ -58,6 +59,8 @@ interface BoardPayload {
     gapPx: number;
     iconScale: number;
     vision: string;
+    /** Chooses the palette. Never changes a size. */
+    colorVision: string;
   };
   voice: { voiceId: string; label: string };
   speechVolume?: number;
@@ -83,6 +86,7 @@ type Overlay =
   | { kind: 'none' }
   | { kind: 'scenario' }
   | { kind: 'dashboard' }
+  | { kind: 'settings' }
   | { kind: 'saved' }
   | { kind: 'add' }
   | { kind: 'folderEdit'; folderId: string; folderTitle: string }
@@ -184,22 +188,27 @@ export default function BoardPage() {
     void load();
   }, [load]);
 
-  // Opened from the end of setup with the describe box already up. Read from
-  // the URL directly rather than with useSearchParams, which would force this
-  // page behind a Suspense boundary for no benefit.
+  // Opened from the end of setup with the describe box already up, or from the
+  // old /settings route with the settings panel up. Read from the URL directly
+  // rather than with useSearchParams, which would force this page behind a
+  // Suspense boundary for no benefit.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).has('situation')) {
-      setOverlay({ kind: 'scenario' });
-    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('situation')) setOverlay({ kind: 'scenario' });
+    else if (params.has('settings')) setOverlay({ kind: 'settings' });
   }, []);
 
-  // The vision answer drives a plain, high-contrast palette rather than only
-  // bigger text, so it has to reach the document root.
+  // The two sight answers both repaint the board rather than only resizing it,
+  // so both have to reach the document root where the role colours are defined.
+  // They are set separately because they are separate answers: acuity picks the
+  // plain high-contrast treatment, colour vision picks which palette is used.
   useEffect(() => {
     if (!data) return;
     document.documentElement.dataset.vision = data.layout.vision;
+    document.documentElement.dataset.colorVision = data.layout.colorVision;
     return () => {
       delete document.documentElement.dataset.vision;
+      delete document.documentElement.dataset.colorVision;
     };
   }, [data]);
 
@@ -290,6 +299,10 @@ export default function BoardPage() {
         case 'saved-boards':
           setDrawerOpen(false);
           setOverlay({ kind: 'saved' });
+          break;
+        case 'settings':
+          setDrawerOpen(false);
+          setOverlay({ kind: 'settings' });
           break;
         case 'dashboard': {
           setDrawerOpen(false);
@@ -845,11 +858,20 @@ export default function BoardPage() {
           <button
             type="button"
             className="chip self-start"
-            onClick={() => router.push('/settings')}
+            onClick={() => setOverlay({ kind: 'settings' })}
           >
             Open settings
           </button>
         </Sheet>
+      ) : null}
+
+      {overlay.kind === 'settings' ? (
+        <SettingsSheet
+          onClose={() => setOverlay({ kind: 'none' })}
+          /* A saved change can move every button, so the board is refetched
+             rather than patched: the server decides the layout, not this page. */
+          onSaved={() => void load()}
+        />
       ) : null}
     </main>
   );

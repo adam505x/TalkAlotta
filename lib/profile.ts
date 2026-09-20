@@ -7,6 +7,7 @@ import {
   type GridPreset,
   type VisionCategory,
 } from './sizing';
+import { parseColorVision, type ColorVisionCategory } from './color-vision';
 import { resolveVoice, isDeepgramVoiceId } from './voice';
 
 /** One communicator, one profile. The row is always id = 1. */
@@ -20,6 +21,8 @@ export interface Profile {
   nationality: string | null;
   caregiverRelationship: string | null;
   vision: VisionCategory;
+  /** Hue, not acuity. Chooses the palette; never changes any size. */
+  colorVision: ColorVisionCategory;
   tapErrorPx: number | null;
   gridIndex: number;
   /** Fraction of its cell each button fills. The grid itself never changes. */
@@ -41,6 +44,7 @@ export interface LayoutSettings {
   gapPx: number;
   iconScale: number;
   vision: VisionCategory;
+  colorVision: ColorVisionCategory;
 }
 
 function clampVolume(n: number): number {
@@ -59,6 +63,7 @@ export function getProfile(): Profile {
       nationality: null,
       caregiverRelationship: null,
       vision: 'unknown',
+      colorVision: 'unknown',
       tapErrorPx: null,
       gridIndex: 2,
       buttonScale: BUTTON_SCALE_DEFAULT,
@@ -79,6 +84,7 @@ export function getProfile(): Profile {
     nationality: row.nationality,
     caregiverRelationship: row.caregiverRelationship,
     vision: (row.vision as VisionCategory) ?? 'unknown',
+    colorVision: parseColorVision(row.colorVision),
     tapErrorPx: row.tapErrorPx,
     gridIndex: row.gridIndex,
     buttonScale:
@@ -102,6 +108,7 @@ export interface ProfileUpdate {
   nationality?: string | null;
   caregiverRelationship?: string | null;
   vision?: VisionCategory;
+  colorVision?: ColorVisionCategory;
   tapErrorPx?: number | null;
   gridIndex?: number;
   buttonScale?: number;
@@ -124,6 +131,7 @@ export function saveProfile(update: ProfileUpdate): Profile {
   if ('caregiverRelationship' in update)
     values.caregiverRelationship = update.caregiverRelationship ?? null;
   if (update.vision) values.vision = update.vision;
+  if (update.colorVision) values.colorVision = update.colorVision;
   if ('tapErrorPx' in update) values.tapErrorPx = update.tapErrorPx ?? null;
   if (typeof update.gridIndex === 'number') values.gridIndex = update.gridIndex;
   if (typeof update.buttonScale === 'number')
@@ -148,6 +156,7 @@ export function getLayout(profile: Profile = getProfile()): LayoutSettings {
     gapPx: profile.gapPx,
     iconScale: profile.iconScale,
     vision: profile.vision,
+    colorVision: profile.colorVision,
   };
 }
 

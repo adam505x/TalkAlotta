@@ -19,6 +19,10 @@ export const profile = sqliteTable('profile', {
   // Vision is a plain question, not a calibration test.
   vision: text('vision').notNull().default('unknown'),
 
+  // Colour vision is a second, separate question. Acuity changes SIZE; this
+  // changes only which palette the Fitzgerald key is drawn in.
+  colorVision: text('color_vision').notNull().default('unknown'),
+
   // Dexterity: the tap test is the only physical calibration, and button size
   // is the only thing it sets. The grid itself is locked at seven by four.
   tapErrorPx: integer('tap_error_px'),

@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getLayout, getProfile, getVoice, saveProfile, type ProfileUpdate } from '@/lib/profile';
+import { parseColorVision } from '@/lib/color-vision';
 import { resolveVoice } from '@/lib/voice';
 import {
+  buttonScaleFloorFromVision,
   clampButtonScale,
   describePreset,
   gapFromButtonScale,
+  iconScaleFromVision,
   suggestLayout,
   type VisionCategory,
 } from '@/lib/sizing';
@@ -43,6 +46,7 @@ export async function POST(request: Request) {
       ? String(body.caregiverRelationship)
       : null;
   if ('vision' in body) update.vision = String(body.vision) as VisionCategory;
+  if ('colorVision' in body) update.colorVision = parseColorVision(body.colorVision);
   if ('routine' in body) update.routine = String(body.routine);
   if ('gridIndex' in body) update.gridIndex = Number(body.gridIndex);
   if ('iconScale' in body) update.iconScale = Number(body.iconScale);
@@ -78,6 +82,31 @@ export async function POST(request: Request) {
         if (!('gapPx' in body)) update.gapPx = suggested.gapPx;
       }
       if (!('iconScale' in body)) update.iconScale = suggested.iconScale;
+    }
+  }
+
+  // The eyesight answer scales the picture and the label inside each button, and
+  // sets a FLOOR under the button size. Both are re-derived whenever eyesight
+  // changes, so changing it from Settings does what Settings says it does
+  // rather than only taking effect the next time the tap test is run.
+  //
+  // The floor is applied on any write that touches either number, not only when
+  // eyesight itself moves, so it cannot be escaped by changing the two in two
+  // separate steps. Per lib/sizing.ts, where the two disagree the bigger button
+  // wins: nobody is harmed by a button being too large.
+  if ('vision' in update || typeof update.buttonScale === 'number') {
+    const current = getProfile();
+    const vision = update.vision ?? current.vision;
+
+    if ('vision' in update && !('iconScale' in body)) {
+      update.iconScale = iconScaleFromVision(vision);
+    }
+
+    const chosen = update.buttonScale ?? current.buttonScale;
+    const floored = clampButtonScale(Math.max(chosen, buttonScaleFloorFromVision(vision)));
+    if (floored !== chosen || typeof update.buttonScale === 'number') {
+      update.buttonScale = floored;
+      if (!('gapPx' in body)) update.gapPx = gapFromButtonScale(floored);
     }
   }
 
