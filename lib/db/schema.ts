@@ -9,6 +9,8 @@ export const profile = sqliteTable('profile', {
 
   // Profile questions. All optional. Age, gender and nationality are what the
   // voice lookup will eventually use to pick an accent-matched voice.
+  // The name is the communicator's, not the caregiver's.
+  name: text('name'),
   age: integer('age'),
   gender: text('gender'),
   nationality: text('nationality'),

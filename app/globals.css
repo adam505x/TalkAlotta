@@ -225,6 +225,20 @@ body {
   outline-offset: 2px;
 }
 
+/* A typed answer on a setup step. Same height and face as an option row, so a
+   question answered by typing looks like it belongs beside the ones answered by
+   picking. */
+.field-text {
+  min-height: 56px;
+  padding: 0 16px;
+  font-size: 17px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  outline: none;
+}
+
 /* Grouped list rows for onboarding picks. */
 .option-group {
   overflow: hidden;

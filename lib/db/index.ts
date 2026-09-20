@@ -31,6 +31,7 @@ function createTables(sqlite: Database.Database) {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS profile (
       id INTEGER PRIMARY KEY,
+      name TEXT,
       age INTEGER,
       gender TEXT,
       nationality TEXT,
@@ -155,8 +156,23 @@ function createTables(sqlite: Database.Database) {
     );
   `);
 
+  addMissingColumns(sqlite);
+
   // The profile row always exists so reads never have to special-case null.
   sqlite.exec('INSERT OR IGNORE INTO profile (id) VALUES (1)');
+}
+
+/**
+ * CREATE TABLE IF NOT EXISTS cannot add a column to a file that already exists,
+ * so a column added after someone's database was first created needs saying
+ * again here. Nullable additions only: anything that needs backfilling or a
+ * rewrite is a real migration and does not belong in a startup path.
+ */
+function addMissingColumns(sqlite: Database.Database) {
+  const columns = new Set(
+    sqlite.prepare('PRAGMA table_info(profile)').all().map((row) => (row as { name: string }).name),
+  );
+  if (!columns.has('name')) sqlite.exec('ALTER TABLE profile ADD COLUMN name TEXT');
 }
 
 declare global {

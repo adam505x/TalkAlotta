@@ -7,6 +7,8 @@ import { resolveVoice } from './voice';
 export const PROFILE_ID = 1;
 
 export interface Profile {
+  /** The communicator's name, as the caregiver typed it. */
+  name: string | null;
   age: number | null;
   gender: string | null;
   nationality: string | null;
@@ -35,6 +37,7 @@ export function getProfile(): Profile {
 
   if (!row) {
     return {
+      name: null,
       age: null,
       gender: null,
       nationality: null,
@@ -52,6 +55,7 @@ export function getProfile(): Profile {
   }
 
   return {
+    name: row.name,
     age: row.age,
     gender: row.gender,
     nationality: row.nationality,
@@ -69,6 +73,7 @@ export function getProfile(): Profile {
 }
 
 export interface ProfileUpdate {
+  name?: string | null;
   age?: number | null;
   gender?: string | null;
   nationality?: string | null;
@@ -87,6 +92,7 @@ export interface ProfileUpdate {
 export function saveProfile(update: ProfileUpdate): Profile {
   const values: Record<string, unknown> = { updatedAt: new Date().toISOString() };
 
+  if ('name' in update) values.name = update.name ?? null;
   if ('age' in update) values.age = update.age ?? null;
   if ('gender' in update) values.gender = update.gender ?? null;
   if ('nationality' in update) values.nationality = update.nationality ?? null;

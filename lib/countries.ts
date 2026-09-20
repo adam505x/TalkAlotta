@@ -268,6 +268,49 @@ function scoreCountry(query: string, country: Country): number {
   return best;
 }
 
+/**
+ * The device's own region, as a name from the list above, so the country
+ * question can arrive already answered and the common case is one tap.
+ *
+ * This reads the region the iPad is already set to, not GPS: no permission
+ * prompt, nothing sent anywhere, and it is a suggestion the caregiver types
+ * over if it is wrong. Anything that does not match the list exactly returns
+ * null, because a confidently wrong accent is worse than an empty field.
+ */
+export function guessCountryFromDevice(): string | null {
+  if (typeof navigator === 'undefined') return null;
+
+  const tags = [...(navigator.languages ?? []), navigator.language].filter(Boolean);
+
+  for (const tag of tags) {
+    let region: string | undefined;
+    try {
+      region = new Intl.Locale(tag).region ?? undefined;
+    } catch {
+      region = tag.split('-')[1];
+    }
+    if (!region) continue;
+
+    let regionName: string | undefined;
+    try {
+      regionName = new Intl.DisplayNames(['en'], { type: 'region' }).of(region.toUpperCase());
+    } catch {
+      regionName = undefined;
+    }
+    if (!regionName) continue;
+
+    const wanted = normalize(regionName);
+    const match = COUNTRIES.find(
+      (country) =>
+        normalize(country.name) === wanted ||
+        (country.aliases ?? []).some((alias) => normalize(alias) === wanted),
+    );
+    if (match) return match.name;
+  }
+
+  return null;
+}
+
 /** Ranked matches. An empty query returns the whole list, alphabetically. */
 export function searchCountries(query: string): Country[] {
   const q = normalize(query.trim());

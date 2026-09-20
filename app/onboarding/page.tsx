@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { CountrySelect } from '@/components/ui/country-select';
+import { guessCountryFromDevice } from '@/lib/countries';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { describePreset, GRID_PRESETS, suggestLayout, type VisionCategory } from '@/lib/sizing';
 import { speak, unlockAudio } from '@/lib/speech';
@@ -29,6 +30,7 @@ import { speak, unlockAudio } from '@/lib/speech';
 
 type Step =
   | 'intro'
+  | 'profile_name'
   | 'profile_age'
   | 'profile_gender'
   | 'profile_nationality'
@@ -41,6 +43,7 @@ type Step =
 
 /** Steps that count toward the progress bar. Intro and done are bookends. */
 const STEP_ORDER: Step[] = [
+  'profile_name',
   'profile_age',
   'profile_gender',
   'profile_nationality',
@@ -187,7 +190,8 @@ function StepLayout({
   scrollAnswer = true,
 }: {
   title: string;
-  guide: React.ReactNode;
+  /** Omitted on steps the question already explains on its own. */
+  guide?: React.ReactNode;
   children?: React.ReactNode;
   action: React.ReactNode;
   wide?: boolean;
@@ -210,7 +214,7 @@ function StepLayout({
     return (
       <section className="flex min-h-0 flex-1 flex-col gap-4">
         <h2 className="type-question shrink-0">{title}</h2>
-        <div className="shrink-0">{guide}</div>
+        {guide ? <div className="shrink-0">{guide}</div> : null}
         <div className="min-h-0 flex-1">{children}</div>
         {footer}
       </section>
@@ -224,7 +228,7 @@ function StepLayout({
             measured centre, and it leaves the room a dropped-open list needs. */}
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 pb-6 lg:pb-10">
           <h2 className="type-question shrink-0 text-center">{title}</h2>
-          <div className="w-full max-w-xl shrink-0">{guide}</div>
+          {guide ? <div className="w-full max-w-xl shrink-0">{guide}</div> : null}
           <div className="w-full max-w-xl shrink-0">{children}</div>
         </div>
         {footer}
@@ -243,7 +247,7 @@ function StepLayout({
         <div className="flex min-h-0 flex-col overflow-y-auto">
           <div className="flex min-h-full flex-col gap-4 lg:justify-center">
             <h2 className="type-question">{title}</h2>
-            {guide}
+            {guide ?? null}
           </div>
         </div>
         <div className={`min-h-0 ${scrollAnswer ? 'overflow-y-auto' : ''}`}>
@@ -362,6 +366,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Profile, one field per screen. No pre-selection; Continue stays disabled until a pick.
+  const [name, setName] = useState('');
   const [age, setAge] = useState<number | null>(null);
   const [gender, setGender] = useState('');
   const [nationality, setNationality] = useState('');
@@ -396,6 +401,14 @@ export default function OnboardingPage() {
     const handler = () => unlockAudio();
     window.addEventListener('pointerdown', handler, { once: true });
     return () => window.removeEventListener('pointerdown', handler);
+  }, []);
+
+  // Answer the country question in advance from the region the iPad is already
+  // set to, so that step is usually just Continue. Guessed once on mount rather
+  // than on the step itself, so it never appears to fill itself in while being
+  // looked at, and only when nothing has been typed.
+  useEffect(() => {
+    setNationality((current) => current || guessCountryFromDevice() || '');
   }, []);
 
   const averageError = useMemo(
@@ -560,7 +573,7 @@ export default function OnboardingPage() {
       {step === 'intro' ? (
         <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 pb-10 lg:pb-16">
           <h2 className="type-display max-w-[26ch] text-center">
-            Let us set the board up together
+            Let's set the board up together!
           </h2>
           <Guide center>
             <p>
@@ -568,33 +581,65 @@ export default function OnboardingPage() {
               two minutes.
             </p>
             <p>
-              You are answering on behalf of the person who will use the board, so answer as you
+              You are answering with / on behalf of the person who will use the board, so answer as you
               see them day to day. Nothing here is permanent. Every answer can be changed later in
-              Settings, and none of it is sent anywhere outside this device.
+              Settings.
             </p>
           </Guide>
-          <Button size="xl" className="w-full max-w-md" onClick={() => goto('profile_age')}>
+          <Button size="xl" className="w-full max-w-md" onClick={() => goto('profile_name')}>
             Start
           </Button>
         </section>
       ) : null}
 
-      {step === 'profile_age' ? (
+      {step === 'profile_name' ? (
         <StepLayout
-          title="How old are they?"
+          center
+          title="What is your name?"
           guide={
-            <Guide>
+            <Guide center>
               <p>
-                Age does two jobs here. It guides which starter words go on the board, because the
-                vocabulary a four year old reaches for is not the vocabulary a teenager needs.
+                The name of the person who will use the board. Whatever they are actually called day
+                to day is the right answer, whether that is a full name or a nickname.
               </p>
-              <p>
-                It also feeds the voice choice further on. A child speaking with an adult voice is
-                one of the common reasons a device gets abandoned, so it is worth a moment now.
-              </p>
-              <p>A rough band is all that is needed.</p>
             </Guide>
           }
+          action={
+            <Button
+              size="xl"
+              className="w-full"
+              disabled={!name.trim()}
+              onClick={() => {
+                if (!name.trim()) return;
+                goto('profile_age');
+              }}
+            >
+              Continue
+            </Button>
+          }
+        >
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && name.trim()) goto('profile_age');
+            }}
+            placeholder="Josie"
+            aria-label="Their name"
+            autoComplete="off"
+            className="field-text w-full"
+          />
+        </StepLayout>
+      ) : null}
+
+      {/* No explanation on this one: the question says everything it needs to,
+          so the band list sits on the centre line under it rather than beside a
+          column of text written to fill the space. */}
+      {step === 'profile_age' ? (
+        <StepLayout
+          center
+          title="How old are they?"
           action={
             <Button
               size="xl"
@@ -673,13 +718,8 @@ export default function OnboardingPage() {
           guide={
             <Guide center>
               <p>
-                This sets the accent of the speaking voice. An accent that matches the people
-                around them is easier for family, classmates and staff to follow, and it keeps the
-                board sounding like it belongs to them rather than to the software.
-              </p>
-              <p>
-                Start typing to narrow the list, or open it and scroll. If the place you want is not
-                listed, type it anyway and it is kept as you wrote it.
+                This sets the accent of the speaking voice. Filled in from this iPad&rsquo;s region,
+                so if it is right, carry on.
               </p>
             </Guide>
           }
@@ -725,6 +765,7 @@ export default function OnboardingPage() {
                 if (!relationship) return;
                 void saveAndContinue(
                   {
+                    name: name.trim() || null,
                     age,
                     gender: gender || null,
                     nationality: nationality || null,
@@ -756,22 +797,12 @@ export default function OnboardingPage() {
           title="How is their eyesight?"
           guide={
             <Guide>
+              <p>This sets how large the pictures are and how many buttons appear at once.</p>
               <p>
-                This one answer changes more of the board than anything else in setup. It sets how
-                large the pictures are, how many buttons appear at once, and whether the background
-                stays plain.
+                For low vision, bigger helps. For CVI, a plainer screen helps more than a bigger
+                one.
               </p>
-              <p>
-                For low vision, size is the thing that helps. For cortical visual impairment, size
-                alone does not. CVI is a difference in how the brain interprets what the eyes send,
-                so a crowded screen is harder to read than a small one. Those boards get fewer
-                buttons, wider spacing and a plain high contrast background rather than just bigger
-                text.
-              </p>
-              <p>
-                If you do not know, choose Not sure. Standard sizes are used, and a therapist can
-                refine it later from Settings.
-              </p>
+              <p>Not sure is fine. Standard sizes are used and Settings can change it later.</p>
             </Guide>
           }
           action={
@@ -809,12 +840,9 @@ export default function OnboardingPage() {
           guide={
             <Guide wide>
               <p>
-                Five circles appear one after another. Hand the iPad over and let them tap the way
-                they normally would, without guiding their hand. The middle is the real target, and
-                the soft ring around it shows how much room there is either side. This measures how
-                big the buttons need to be and how much space to leave between them, and the
-                spacing matters as much as the size: for an unsteady reach or a tremor, a wider gap
-                is what stops the neighbouring button being pressed by mistake.
+                Five circles, one after another. Hand the iPad over and let them tap as they
+                normally would, without guiding their hand. This sets how big the buttons are and
+                how much space to leave between them.
               </p>
             </Guide>
           }

@@ -21,6 +21,10 @@ export async function POST(request: Request) {
 
   const update: ProfileUpdate = {};
 
+  if ('name' in body) {
+    const name = body.name ? String(body.name).trim() : '';
+    update.name = name || null;
+  }
   if ('age' in body) {
     const n = Number(body.age);
     update.age = Number.isFinite(n) && n > 0 ? Math.round(n) : null;
