@@ -664,15 +664,11 @@ export default function OnboardingPage() {
 
       {step === 'profile_gender' ? (
         <StepLayout
+          center
           title="What is their gender?"
           guide={
-            <Guide>
-              <p>
-                This is used for one thing only: choosing a speaking voice that the person is happy
-                to be heard with. The board speaks in their place, so the voice is treated as part
-                of how they present themselves, not as a setting.
-              </p>
-              <p>It can be changed at any time in Settings.</p>
+            <Guide center>
+              <p>Used only to pick a speaking voice they are happy to be heard with.</p>
             </Guide>
           }
           action={
