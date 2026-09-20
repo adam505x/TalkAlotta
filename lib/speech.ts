@@ -175,14 +175,23 @@ export interface SpeakResult {
 
 export async function speak(
   text: string,
-  options: { kind?: 'word' | 'sentence'; boardId?: number } = {},
+  options: {
+    kind?: 'word' | 'sentence';
+    boardId?: number;
+    /**
+     * The sentence as separate buttons. The server puts a break between them, and
+     * it cannot work that out from the joined string because a button can itself
+     * be a phrase like "wash hands".
+     */
+    words?: string[];
+  } = {},
 ): Promise<SpeakResult> {
   const clean = text.trim();
   if (!clean) return { spoken: false, via: 'none' };
 
   const kind = options.kind ?? 'word';
-  // v3: pronunciation fixes for silent Aura words (e.g. it → itt).
-  const memoryKey = `v3:${kind}:${clean}`;
+  // v4: WAV clips with a padded tail, and breaks between words in a sentence.
+  const memoryKey = `v4:${kind}:${clean}`;
   const el = element();
 
   const held = memory.get(memoryKey);
@@ -200,7 +209,12 @@ export async function speak(
     const response = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: clean, kind, boardId: options.boardId }),
+      body: JSON.stringify({
+        text: clean,
+        kind,
+        words: options.words,
+        boardId: options.boardId,
+      }),
     });
 
     if (!response.ok) {

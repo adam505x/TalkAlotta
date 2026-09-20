@@ -201,12 +201,12 @@ export default function BoardPage() {
 
   const speakAll = useCallback(async () => {
     if (sentence.length === 0) return;
-    const text = sentence.map((w) => w.label).join(' ');
+    const words = sentence.map((w) => w.label);
     stopSpeaking();
     setSpeaking(true);
-    // One call for the whole sentence: it sounds far better than stitching
-    // single words together, and the cache means a repeated sentence is free.
-    const result = await speak(text, { kind: 'sentence' });
+    // The buttons go over as a list, not a joined string, so the server can leave
+    // a short break between them. It still comes back as one clip.
+    const result = await speak(words.join(' '), { kind: 'sentence', words });
     setSpeaking(false);
     if (result.via === 'browser') setVoiceNote('built-in browser voice');
   }, [sentence]);
