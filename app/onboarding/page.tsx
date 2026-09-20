@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { CountrySelect } from '@/components/ui/country-select';
-import { guessCountryFromDevice } from '@/lib/countries';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { describePreset, GRID_PRESETS, suggestLayout, type VisionCategory } from '@/lib/sizing';
 import { speak, unlockAudio } from '@/lib/speech';
@@ -403,14 +402,6 @@ export default function OnboardingPage() {
     return () => window.removeEventListener('pointerdown', handler);
   }, []);
 
-  // Answer the country question in advance from the region the iPad is already
-  // set to, so that step is usually just Continue. Guessed once on mount rather
-  // than on the step itself, so it never appears to fill itself in while being
-  // looked at, and only when nothing has been typed.
-  useEffect(() => {
-    setNationality((current) => current || guessCountryFromDevice() || '');
-  }, []);
-
   const averageError = useMemo(
     () => (errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 0),
     [errors],
@@ -722,8 +713,8 @@ export default function OnboardingPage() {
           guide={
             <Guide center>
               <p>
-                This sets the accent of the speaking voice. Filled in from this iPad&rsquo;s region,
-                so if it is right, carry on.
+                This sets the accent of the speaking voice. Start typing to narrow the list, or open
+                it and scroll.
               </p>
             </Guide>
           }
