@@ -394,8 +394,8 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    color-mix(in srgb, var(--role-modifier-line) 20%, transparent) 0%,
-    color-mix(in srgb, var(--role-modifier-line) 7%, transparent) 60%,
+    color-mix(in srgb, var(--tap-accent) 26%, transparent) 0%,
+    color-mix(in srgb, var(--tap-accent) 9%, transparent) 60%,
     transparent 100%
   );
 }
@@ -404,7 +404,7 @@ input[type="range"]::-moz-range-thumb {
   width: var(--tap-zone);
   height: var(--tap-zone);
   border-radius: 50%;
-  border: 1px dashed color-mix(in srgb, var(--role-modifier-line) 50%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--tap-accent-ink) 45%, transparent);
 }
 .tap-target__mark {
   display: grid;
@@ -417,8 +417,8 @@ input[type="range"]::-moz-range-thumb {
   width: var(--tap-core);
   height: var(--tap-core);
   border-radius: 50%;
-  background: var(--role-modifier-bg);
-  border: 3px solid var(--role-modifier-line);
+  background: var(--tap-accent-wash);
+  border: 3px solid var(--tap-accent-ink);
   box-shadow:
     0 2px 6px color-mix(in srgb, var(--ink) 18%, transparent),
     inset 0 0 0 4px color-mix(in srgb, var(--card) 72%, transparent);
@@ -431,14 +431,14 @@ input[type="range"]::-moz-range-thumb {
     linear-gradient(
       to right,
       transparent calc(50% - 0.5px),
-      color-mix(in srgb, var(--role-modifier-line) 75%, transparent) calc(50% - 0.5px)
+      color-mix(in srgb, var(--tap-accent-ink) 75%, transparent) calc(50% - 0.5px)
         calc(50% + 0.5px),
       transparent calc(50% + 0.5px)
     ),
     linear-gradient(
       to bottom,
       transparent calc(50% - 0.5px),
-      color-mix(in srgb, var(--role-modifier-line) 75%, transparent) calc(50% - 0.5px)
+      color-mix(in srgb, var(--tap-accent-ink) 75%, transparent) calc(50% - 0.5px)
         calc(50% + 0.5px),
       transparent calc(50% + 0.5px)
     );
@@ -447,7 +447,7 @@ input[type="range"]::-moz-range-thumb {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--role-modifier-line);
+  background: var(--tap-accent-ink);
 }
 
 /* How many targets are left, without words. */
@@ -628,15 +628,39 @@ input[type="range"]::-moz-range-thumb {
   border-bottom-right-radius: 6px;
   background: rgba(12, 14, 18, 0.28);
 }
-/* A tile in the setup size preview. Fixed ratio for the same reason .cell has
-   one: the column count alone decides the size, and a button is never drawn as
-   a rectangle just because the space it sits in is one. Held square rather than
-   at the board's 1/0.92, because what this preview is being read for is size,
-   spacing and count, and a square is the plainest way to show all three. The
-   radius is a percentage so it stays in proportion as the tiles get smaller. */
-.cell-preview {
+/* The setup size preview: a miniature of the locked front board.
+
+   Seven across and four down, always. The grid has NO gap, so every cell sits
+   flush against its neighbour and the cells themselves never move. What the
+   size slider changes is how much of its cell each button fills, which is why
+   shrinking a button opens up the space around it and growing one closes that
+   space back up. Size and spacing are one control, not two, and drawing it this
+   way is the only honest way to show that. */
+.board-preview {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  width: 100%;
+  /* Four square rows are tall. Capped and centred so the preview stays a
+     preview and does not push the buttons below it off a short screen. */
+  max-width: 420px;
+  margin-inline: auto;
+}
+
+.board-preview__cell {
+  display: grid;
+  place-items: center;
   aspect-ratio: 1;
   min-width: 0;
+}
+
+/* Held square rather than at the board's 1/0.92, because what this preview is
+   read for is size and spacing, and a square is the plainest way to show both.
+   The radius is a percentage so it stays in proportion as the button shrinks.
+   No transition on the width: the slider is dragged, and it should track the
+   thumb exactly rather than chase it. */
+.board-preview__button {
+  width: calc(100% * var(--button-scale, 0.9));
+  aspect-ratio: 1;
   border: 2px solid var(--role-object-line);
   border-radius: 16%;
   background: var(--role-object-bg);
@@ -825,4 +849,163 @@ input[type="range"]::-moz-range-thumb {
 :root[data-vision="low_vision"] .page-light {
   background: #000;
   color: #fff;
+}
+
+/* ---------------------------------------------------------------------------
+   BRAND SURFACE — the caregiver-facing setup flow.
+
+   Every brand token is scoped to this class rather than :root on purpose. The
+   brand sheet's misuse board is explicit that brand colours must never enter
+   the card colour space, and the Fitzgerald --role-* tokens on :root ARE that
+   space. Scoping here means the palette physically cannot reach the board.
+
+   Palette: flag colours for the logo and large shapes, the darkened pair for
+   anything carrying text.
+--------------------------------------------------------------------------- */
+.brand-surface {
+  --brand-green: #169b62; /* PMS 347 U */
+  --brand-orange: #ff883e; /* PMS 151 U */
+  --brand-green-text: #0e7a4c;
+  --brand-orange-text: #b34a0e;
+  --brand-ink: #1b1b1a;
+  --brand-ink-soft: #5f6560;
+  --brand-muted: #dce0db;
+  --brand-paper: #f4f5f3;
+
+  /* The shared control tokens, remapped for this subtree only. */
+  --focus: var(--brand-green-text);
+  --focus-strong: #0a5c3a;
+  --focus-ink: #ffffff;
+  --tint-soft: rgb(22 155 98 / 0.1);
+  --tint-strong: rgb(22 155 98 / 0.18);
+  --fill-press: rgb(27 27 26 / 0.06);
+
+  /* The tap target. Orange because it is the palette's accent and because the
+     rest of this flow is green: the one thing on screen to aim at must not
+     read as another button. Every edge uses the darkened pair, per the
+     palette's rule that anything carrying detail takes the text-safe shade. */
+  --tap-accent: var(--brand-orange);
+  --tap-accent-ink: var(--brand-orange-text);
+  --tap-accent-wash: color-mix(in srgb, var(--brand-orange) 20%, #ffffff);
+  /* Hit and miss. Green reads as the affirmative everywhere else here, and the
+     miss borrows the existing danger red rather than inventing one. */
+  --tap-hit: var(--brand-green);
+  --tap-hit-wash: color-mix(in srgb, var(--brand-green) 16%, #ffffff);
+  --tap-miss: var(--danger);
+  --tap-miss-wash: color-mix(in srgb, var(--danger) 16%, #ffffff);
+  --ink: var(--brand-ink);
+  --ink-soft: var(--brand-ink-soft);
+  --line: var(--brand-muted);
+  --card: #ffffff;
+
+  background: var(--brand-paper);
+  color: var(--brand-ink);
+  font-family: var(--font-text), system-ui, sans-serif;
+}
+
+/* Fredoka carries the brand and the headings, Nunito Sans everything that gets
+   read. Sizes are the brand sheet's: display 44 / 30 / 21 at weight 500, body
+   17 regular, lead 19 semibold, caption 14. */
+.brand-surface .type-display,
+.brand-surface .type-title,
+.brand-surface .brand-wordmark {
+  font-family: var(--font-brand), system-ui, sans-serif;
+  font-weight: 500;
+}
+.brand-surface .type-display {
+  font-size: clamp(2rem, 3.4vw, 2.75rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.brand-surface .type-title {
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+}
+.brand-surface .type-body {
+  font-size: 1.0625rem;
+  font-weight: 400;
+  line-height: 1.52;
+}
+.brand-surface .type-body-lg {
+  font-size: 1.1875rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.brand-surface .type-footnote {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+/* The wordmark. Never respaced: the tracking is part of the lockup. */
+.brand-wordmark {
+  font-family: var(--font-brand), system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--brand-ink);
+}
+
+/* ---------------------------------------------------------------------------
+   Bubble face motion.
+
+   The brand sheet specifies the face as a swap, not an animation, and the five
+   expressions still swap rather than tween. What moves is the whole bubble,
+   drifting the way a held balloon does, which reads as alive without animating
+   the artwork itself. Sine in-out because a float has no start or end.
+--------------------------------------------------------------------------- */
+@keyframes bubble-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.bubble-bob {
+  animation: bubble-bob 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+/* The blink. An eyes-only character has no other way to look alive, and a long
+   gap between short closures is what keeps it from reading as a twitch. The
+   origin is the eye centre line in viewBox units, so the lids close onto the
+   eye rather than collapsing toward the top of the head. */
+@keyframes glyph-blink {
+  0%,
+  91%,
+  100% {
+    transform: scaleY(1);
+  }
+  94.5% {
+    transform: scaleY(0.1);
+  }
+}
+.glyph-eyes {
+  animation: glyph-blink 5.4s ease-in-out infinite;
+  transform-box: view-box;
+  transform-origin: 65px 61px;
+}
+
+/* The face fades in on a swap so the change is legible rather than a hard cut. */
+@keyframes face-swap {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.face-swap {
+  animation: face-swap 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Drop the travel and the blink, keep the fade: expressions still swap,
+     nothing drifts or flickers. */
+  .bubble-bob,
+  .glyph-eyes {
+    animation: none;
+  }
 }

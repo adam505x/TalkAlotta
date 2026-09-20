@@ -5,7 +5,19 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { CountrySelect } from '@/components/ui/country-select';
 import { ProgressBar } from '@/components/ui/progress-bar';
-import { describePreset, GRID_PRESETS, suggestLayout, type VisionCategory } from '@/lib/sizing';
+import { Logo } from '@/components/brand/Logo';
+import { Glyph, type GlyphExpression } from '@/components/brand/Glyph';
+import {
+  BOARD_COLS,
+  BOARD_ROWS,
+  BUTTON_SCALE_DEFAULT,
+  BUTTON_SCALE_MAX,
+  BUTTON_SCALE_MIN,
+  BUTTON_SCALE_STEP,
+  describeButtonSize,
+  suggestLayout,
+  type VisionCategory,
+} from '@/lib/sizing';
 import { speak, unlockAudio } from '@/lib/speech';
 
 /**
@@ -48,8 +60,8 @@ const STEP_ORDER: Step[] = [
   'profile_nationality',
   'profile_relationship',
   'vision',
-  'tap',
   'routine',
+  'tap',
   'voice',
 ];
 
@@ -69,20 +81,12 @@ const TAP_DEAD_ZONE_RADIUS = 100;
 /** How long the tap feedback holds on screen before the next target appears. */
 const TAP_SETTLE_MS = 420;
 
-const VISION_OPTIONS: { value: VisionCategory; label: string; hint: string }[] = [
-  { value: 'none', label: 'No known difficulty', hint: 'Sees the screen comfortably' },
-  { value: 'glasses', label: 'Wears glasses', hint: 'Corrected vision, glasses worn for screens' },
-  {
-    value: 'low_vision',
-    label: 'Low vision',
-    hint: 'Sees better when pictures are larger and plainer',
-  },
-  {
-    value: 'cvi',
-    label: 'Cortical visual impairment',
-    hint: 'Fewer buttons, plain background, high contrast',
-  },
-  { value: 'unknown', label: 'Not sure', hint: 'Standard sizes are used until you know more' },
+const VISION_OPTIONS: { value: VisionCategory; label: string }[] = [
+  { value: 'none', label: 'No known difficulty' },
+  { value: 'glasses', label: 'Wears glasses' },
+  { value: 'low_vision', label: 'Low vision' },
+  { value: 'cvi', label: 'Cortical visual impairment' },
+  { value: 'unknown', label: 'Not sure' },
 ];
 
 const GENDER_OPTIONS = [
@@ -100,31 +104,11 @@ const RELATIONSHIP_OPTIONS = [
 ];
 
 const ROUTINE_OPTIONS = [
-  {
-    value: 'fixed',
-    label: 'The same order every day',
-    hint: 'A set sequence. Changing it without warning is genuinely distressing.',
-  },
-  {
-    value: 'rigid',
-    label: 'Mostly fixed, small changes are handled',
-    hint: 'Predictable days. A swap here or there is fine once they know about it.',
-  },
-  {
-    value: 'split',
-    label: 'Structured in one place, relaxed in another',
-    hint: 'School or therapy runs to a timetable, home does not, or the other way round.',
-  },
-  {
-    value: 'loose',
-    label: 'A rough pattern, times move around',
-    hint: 'The same sort of day, but nothing happens at a fixed hour.',
-  },
-  {
-    value: 'varies',
-    label: 'Different every day',
-    hint: 'No two days look alike, so there is no order to rely on.',
-  },
+  { value: 'fixed', label: 'The same order every day' },
+  { value: 'rigid', label: 'Mostly fixed, small changes are handled' },
+  { value: 'split', label: 'Structured in one place, relaxed in another' },
+  { value: 'loose', label: 'A rough pattern, times move around' },
+  { value: 'varies', label: 'Different every day' },
 ];
 
 /**
@@ -142,6 +126,60 @@ const AGE_OPTIONS: { value: number; label: string }[] = [
   { value: 30, label: '20 to 39' },
   { value: 50, label: '40 or older' },
 ];
+
+/**
+ * Which eyes the glyph wears on each step.
+ *
+ * Mostly `open` on purpose. The character reacting at four points across the
+ * flow reads as attention; a different face on every screen would read as
+ * fidgeting next to a question someone is trying to answer.
+ */
+const STEP_EXPRESSION: Record<Step, GlyphExpression> = {
+  intro: 'happy',
+  // Meeting someone: interested, then settling into plain attention.
+  profile_name: 'curious',
+  profile_age: 'open',
+  profile_gender: 'open',
+  profile_nationality: 'curious',
+  profile_relationship: 'open',
+  // The questions that ask for a judgement rather than a fact.
+  vision: 'curious',
+  routine: 'curious',
+  // The step that is a game.
+  tap: 'wink',
+  // Hearing the voice for the first time, and finishing.
+  voice: 'happy',
+  done: 'happy',
+};
+
+/** How long a wink lasts before the face settles. A beat, not a pose. */
+const WINK_MS = 1200;
+
+/**
+ * A wink is a gesture, not a state.
+ *
+ * STEP_EXPRESSION names the expression a step opens on, which is right for the
+ * symmetrical faces: they are moods, and a mood can hold for as long as the
+ * question does. The wink cannot. Holding it leaves the character with one eye
+ * shut for the whole of the tap step, which is five taps long and reads as a
+ * rendering fault rather than as a joke, and the idle blink squashing a face
+ * that is already half closed only makes it look more broken.
+ *
+ * So the wink plays once on arrival and then settles to plain attention. Going
+ * back to the step winks again, because it is the arrival that is being marked.
+ */
+function useSettlingExpression(target: GlyphExpression): GlyphExpression {
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    setSettled(false);
+    if (target !== 'wink') return;
+    const timer = window.setTimeout(() => setSettled(true), WINK_MS);
+    return () => window.clearTimeout(timer);
+  }, [target]);
+
+  return target === 'wink' && settled ? 'open' : target;
+}
 
 /**
  * The explanation under each question. Plain prose, no card and no bubble: it
@@ -323,12 +361,10 @@ function OptionGroup({ children }: { children: React.ReactNode }) {
  */
 function OptionRow({
   label,
-  hint,
   selected,
   onClick,
 }: {
   label: string;
-  hint?: string;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -347,11 +383,6 @@ function OptionRow({
         >
           {label}
         </span>
-        {hint ? (
-          <span className="type-footnote mt-1 block" style={{ color: 'var(--ink-soft)' }}>
-            {hint}
-          </span>
-        ) : null}
       </span>
       {selected ? <CheckMark /> : null}
     </button>
@@ -384,9 +415,9 @@ export default function OnboardingPage() {
   const [tapSettling, setTapSettling] = useState(false);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
 
-  // Layout, suggested then editable in the pop-up confirmation.
-  const [gridIndex, setGridIndex] = useState(2);
-  const [gapPx, setGapPx] = useState(12);
+  // Button size, suggested then editable in the pop-up confirmation. The grid
+  // is not here because there is nothing to hold: it is always seven by four.
+  const [buttonScale, setButtonScale] = useState(BUTTON_SCALE_DEFAULT);
   const [iconScale, setIconScale] = useState(1);
   const [showSizeSheet, setShowSizeSheet] = useState(false);
 
@@ -419,6 +450,8 @@ export default function OnboardingPage() {
   }, []);
 
   const stepIndex = STEP_ORDER.indexOf(step);
+
+  const glyphExpression = useSettlingExpression(STEP_EXPRESSION[step]);
 
   const goBack = useCallback(() => {
     if (stepIndex <= 0) {
@@ -454,8 +487,7 @@ export default function OnboardingPage() {
         if (tapIndex + 1 >= TAP_TARGETS.length) {
           const avg = nextErrors.reduce((a, b) => a + b, 0) / nextErrors.length;
           const suggested = suggestLayout(avg, vision ?? 'unknown');
-          setGridIndex(suggested.gridIndex);
-          setGapPx(suggested.gapPx);
+          setButtonScale(suggested.buttonScale);
           setIconScale(suggested.iconScale);
           setShowSizeSheet(true);
         } else {
@@ -470,8 +502,7 @@ export default function OnboardingPage() {
     setErrors([]);
     setTapIndex(0);
     const fallback = suggestLayout(55, vision ?? 'unknown');
-    setGridIndex(fallback.gridIndex);
-    setGapPx(fallback.gapPx);
+    setButtonScale(fallback.buttonScale);
     setIconScale(fallback.iconScale);
     setShowSizeSheet(true);
   }, [vision]);
@@ -509,21 +540,30 @@ export default function OnboardingPage() {
   // Questions after the first one ask about the communicator by name. Blank only
   // if someone goes back and clears it, and those questions fall back to "they".
   const askedName = name.trim();
+  /**
+   * "Liam's" once a name is given, "their" before that. Both drop into the same
+   * sentence, so every question reads properly either way. Singular possessive
+   * always takes 's, including names already ending in s (Chicago/Oxford), so
+   * there is no special case to get wrong.
+   */
+  const askedPossessive = askedName ? `${askedName}'s` : 'their';
 
   return (
     /* The device safe-area insets sit on the wrapper, not on main. As plain
        unlayered rules they beat any padding utility on the same element, so on
        main they cancelled its page padding outright and pinned the header and
        the button to the screen edges. Here they add to it instead. */
-    <div className="page-light safe-top safe-bottom h-dvh overflow-hidden">
+    <div className="brand-surface page-light safe-top safe-bottom h-dvh overflow-hidden">
     <main className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4 overflow-hidden p-5 lg:gap-5 lg:p-6">
       <header className="flex shrink-0 flex-col gap-3">
-        <p
-          className="text-[13px] font-semibold uppercase"
-          style={{ color: 'var(--ink-soft)', letterSpacing: '0.06em' }}
-        >
-          TalkAlotta
-        </p>
+        <div className="flex items-center justify-between gap-4">
+          <Logo variant="horizontal" size={30} />
+          {/* Sits in the chrome rather than in the step, so it is always there
+              without taking height from a layout that cannot scroll. */}
+          {stepIndex >= 0 ? (
+            <Glyph size={64} expression={glyphExpression} />
+          ) : null}
+        </div>
         {stepIndex >= 0 ? (
           <div className="flex items-center gap-3">
             {/* A bare chevron in the tint colour, the way iOS draws Back. The
@@ -553,7 +593,11 @@ export default function OnboardingPage() {
       {error ? (
         <p
           className="shrink-0 rounded-xl border-2 p-3 text-base font-semibold"
-          style={{ borderColor: 'var(--role-feeling-line)', background: 'var(--role-feeling-bg)' }}
+          style={{
+            borderColor: 'var(--danger)',
+            background: 'color-mix(in srgb, var(--danger) 12%, #ffffff)',
+            color: 'var(--danger)',
+          }}
         >
           {error}
         </p>
@@ -567,18 +611,18 @@ export default function OnboardingPage() {
           things spread down the screen. */}
       {step === 'intro' ? (
         <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 pb-10 lg:pb-16">
+          <Glyph size={112} expression="happy" />
           <h2 className="type-display max-w-[26ch] text-center">
             Let's set the board up together!
           </h2>
           <Guide center>
             <p>
-              A few short questions, one at a time, then one quick tapping exercise. It takes about
+              A few short questions, then one quick tapping exercise. It takes about
               two minutes.
             </p>
             <p>
-              You are answering with / on behalf of the person who will use the board, so answer as you
-              see them day to day. Nothing here is permanent. Every answer can be changed later in
-              Settings.
+              You are answering with, or on behalf of, the boards user.
+              Every answer can be changed later in Settings.
             </p>
           </Guide>
           <Button size="xl" className="w-full max-w-md" onClick={() => goto('profile_name')}>
@@ -590,7 +634,7 @@ export default function OnboardingPage() {
       {step === 'profile_name' ? (
         <StepLayout
           center
-          title="What is your name?"
+          title="Who is the board for?"
           guide={
             <Guide center>
               <p>
@@ -665,7 +709,7 @@ export default function OnboardingPage() {
       {step === 'profile_gender' ? (
         <StepLayout
           center
-          title="What is their gender?"
+          title={`What is ${askedPossessive} gender?`}
           guide={
             <Guide center>
               <p>Used only to pick a speaking voice they are happy to be heard with.</p>
@@ -785,10 +829,10 @@ export default function OnboardingPage() {
 
       {step === 'vision' ? (
         <StepLayout
-          title="How is their eyesight?"
+          title={`How is ${askedPossessive} eyesight?`}
           guide={
             <Guide>
-              <p>This sets how large the pictures are and how many buttons appear at once.</p>
+              <p>This sets how large the pictures and words inside each button are.</p>
               <p>
                 For low vision, bigger helps. For CVI, a plainer screen helps more than a bigger
                 one.
@@ -803,7 +847,7 @@ export default function OnboardingPage() {
               disabled={saving || !vision}
               onClick={() => {
                 if (!vision) return;
-                void saveAndContinue({ vision }, 'tap');
+                void saveAndContinue({ vision }, 'routine');
               }}
             >
               Continue
@@ -815,7 +859,6 @@ export default function OnboardingPage() {
               <OptionRow
                 key={option.value}
                 label={option.label}
-                hint={option.hint}
                 selected={vision === option.value}
                 onClick={() => setVision(option.value)}
               />
@@ -832,8 +875,7 @@ export default function OnboardingPage() {
             <Guide wide>
               <p>
                 Five circles, one after another. Hand the iPad over and let them tap as they
-                normally would, without guiding their hand. This sets how big the buttons are and
-                how much space to leave between them.
+                normally would, without guiding their hand. This sets how big the buttons are.
               </p>
             </Guide>
           }
@@ -893,8 +935,8 @@ export default function OnboardingPage() {
                   transform: 'translate(-50%, -50%)',
                   width: 56,
                   height: 56,
-                  border: `4px solid ${tapFeedback.hit ? 'var(--role-action-line)' : 'var(--role-feeling-line)'}`,
-                  background: tapFeedback.hit ? 'var(--role-action-bg)' : 'var(--role-feeling-bg)',
+                  border: `4px solid ${tapFeedback.hit ? 'var(--tap-hit)' : 'var(--tap-miss)'}`,
+                  background: tapFeedback.hit ? 'var(--tap-hit-wash)' : 'var(--tap-miss-wash)',
                   animation: 'tap-ripple 420ms ease-out forwards',
                 }}
               />
@@ -926,21 +968,15 @@ export default function OnboardingPage() {
 
       {step === 'routine' ? (
         <StepLayout
-          title="How structured is their day?"
+          title={`How structured is ${askedPossessive} day?`}
           guide={
             <Guide>
+              <p>This sets how much the board leans on the time of day.</p>
               <p>
-                The board can offer different words at different times of day, putting breakfast
-                words up at breakfast time. That prediction is only useful if the day is
-                predictable, so this answer sets how much weight the time of day is given.
+                The more fixed the day, the more the board stays put rather than rearranging
+                itself.
               </p>
-              <p>
-                It also tells us how carefully to tread. For someone who relies on a fixed order,
-                an unannounced change to what is on screen is not a small thing, so the more fixed
-                the day, the more the board stays put and waits for you to describe a new moment
-                instead of rearranging itself.
-              </p>
-              <p>Pick the closest one. It can be changed in Settings as they change.</p>
+              <p>Pick the closest one. Settings can change it later.</p>
             </Guide>
           }
           action={
@@ -950,7 +986,7 @@ export default function OnboardingPage() {
               disabled={saving || !routine}
               onClick={() => {
                 if (!routine) return;
-                void saveAndContinue({ routine }, 'voice');
+                void saveAndContinue({ routine }, 'tap');
               }}
             >
               Continue
@@ -962,7 +998,6 @@ export default function OnboardingPage() {
               <OptionRow
                 key={option.value}
                 label={option.label}
-                hint={option.hint}
                 selected={routine === option.value}
                 onClick={() => setRoutine(option.value)}
               />
@@ -974,7 +1009,7 @@ export default function OnboardingPage() {
       {step === 'voice' ? (
         <StepLayout
           center
-          title="How should the voice sound?"
+          title={`How should ${askedPossessive} voice sound?`}
           guide={
             <Guide center>
               <p>Worked out from the answers you gave. Have a listen and confirm.</p>
@@ -1031,9 +1066,13 @@ export default function OnboardingPage() {
 
       {step === 'done' ? (
         <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 pb-10 lg:pb-16">
+          <Glyph size={112} expression="happy" />
           <h2 className="type-display text-center">Ready</h2>
           <Guide center>
-            <p>The board is set to {describePreset(gridIndex)}.</p>
+            <p>
+              The board is {BOARD_COLS} across and {BOARD_ROWS} down.{' '}
+              {describeButtonSize(buttonScale).toLowerCase()}.
+            </p>
             <p>Every answer can be changed from Settings at any time.</p>
           </Guide>
           <div className="flex flex-wrap justify-center gap-3">
@@ -1067,67 +1106,52 @@ export default function OnboardingPage() {
               <h2 className="type-title">Button size</h2>
               <p className="type-body mt-1" style={{ color: 'var(--ink-soft)' }}>
                 {errors.length
-                  ? `Suggested from the tapping: ${describePreset(gridIndex)}.`
+                  ? `Suggested from the tapping: ${describeButtonSize(buttonScale).toLowerCase()}.`
                   : 'No tapping measured, so this is the standard size.'}
                 {suggestion.visionOverrodeTap ? ' Made larger because of the eyesight answer.' : ''}
               </p>
             </div>
 
+            {/* One slider, because on a fixed grid there is only one thing to
+                set. The buttons stay where they are and change size; the space
+                between them is whatever is left over. */}
             <label className="flex flex-col gap-2">
               <span className="text-[15px] font-semibold">
-                Fewer, bigger buttons &nbsp;&harr;&nbsp; more, smaller buttons
+                Smaller buttons &nbsp;&harr;&nbsp; bigger buttons
               </span>
               <input
                 type="range"
-                min={0}
-                max={GRID_PRESETS.length - 1}
-                step={1}
-                value={gridIndex}
-                onChange={(e) => setGridIndex(Number(e.target.value))}
-                style={sliderFill(gridIndex, 0, GRID_PRESETS.length - 1)}
+                min={BUTTON_SCALE_MIN}
+                max={BUTTON_SCALE_MAX}
+                step={BUTTON_SCALE_STEP}
+                value={buttonScale}
+                onChange={(e) => setButtonScale(Number(e.target.value))}
+                style={sliderFill(buttonScale, BUTTON_SCALE_MIN, BUTTON_SCALE_MAX)}
               />
               <span className="type-footnote" style={{ color: 'var(--ink-soft)' }}>
-                {describePreset(gridIndex)}
+                {describeButtonSize(buttonScale)}. Bigger buttons are easier to hit; smaller ones
+                leave more space between them.
               </span>
             </label>
 
-            <label className="flex flex-col gap-2">
-              <span className="text-[15px] font-semibold">Space between buttons</span>
-              <input
-                type="range"
-                min={8}
-                max={28}
-                step={1}
-                value={gapPx}
-                onChange={(e) => setGapPx(Number(e.target.value))}
-                style={sliderFill(gapPx, 8, 28)}
-              />
-              <span className="type-footnote" style={{ color: 'var(--ink-soft)' }}>
-                {gapPx} pixels. More space means fewer accidental presses.
-              </span>
-            </label>
-
-            {/* A live preview at the chosen size, so the choice is visible not
-                described. Every cell carries the board's own tile shape, so the
-                sliders change how big the buttons are and how far apart they
-                sit, and can never stretch a button into a long rectangle the
-                board would never draw. The frame keeps its height across
-                presets so the sheet does not jump while a slider is dragged. */}
-            <div
-              className="flex items-center justify-center rounded-xl p-3"
-              style={{ border: '1px solid var(--line)', minHeight: 180 }}
-            >
+            {/* A live miniature of the real board, so the choice is seen rather
+                than described. The grid is always seven across and four down and
+                the cells never move: only the buttons inside them grow and
+                shrink, which is exactly what the slider does to the real board.
+                Held square so a button is never drawn as a rectangle the board
+                would not draw, and the frame holds its height at every size so
+                the sheet does not jump while the slider is dragged. */}
+            <div className="rounded-xl p-3" style={{ border: '1px solid var(--line)' }}>
               <div
-                className="grid w-full"
-                style={{
-                  gridTemplateColumns: `repeat(${GRID_PRESETS[gridIndex].cols}, minmax(0, 1fr))`,
-                  gap: `${gapPx}px`,
-                }}
+                className="board-preview"
+                role="img"
+                aria-label={`The board: ${BOARD_COLS} buttons across and ${BOARD_ROWS} down. ${describeButtonSize(buttonScale)}.`}
+                style={{ '--button-scale': buttonScale } as React.CSSProperties}
               >
-                {Array.from({
-                  length: GRID_PRESETS[gridIndex].cols * GRID_PRESETS[gridIndex].rows,
-                }).map((_, i) => (
-                  <span key={i} className="cell-preview" />
+                {Array.from({ length: BOARD_COLS * BOARD_ROWS }).map((_, i) => (
+                  <span key={i} className="board-preview__cell" aria-hidden="true">
+                    <span className="board-preview__button" />
+                  </span>
                 ))}
               </div>
             </div>
@@ -1138,12 +1162,11 @@ export default function OnboardingPage() {
               onClick={() =>
                 void saveAndContinue(
                   {
-                    gridIndex,
-                    gapPx,
+                    buttonScale,
                     iconScale,
                     tapErrorPx: errors.length ? Math.round(averageError) : null,
                   },
-                  'routine',
+                  'voice',
                 )
               }
             >

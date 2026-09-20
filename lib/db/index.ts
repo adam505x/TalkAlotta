@@ -39,6 +39,7 @@ function createTables(sqlite: Database.Database) {
       vision TEXT NOT NULL DEFAULT 'unknown',
       tap_error_px INTEGER,
       grid_index INTEGER NOT NULL DEFAULT 2,
+      button_scale_pct INTEGER,
       gap_px INTEGER NOT NULL DEFAULT 12,
       icon_scale_pct INTEGER NOT NULL DEFAULT 100,
       routine TEXT NOT NULL DEFAULT 'varies',
@@ -173,6 +174,8 @@ function addMissingColumns(sqlite: Database.Database) {
     sqlite.prepare('PRAGMA table_info(profile)').all().map((row) => (row as { name: string }).name),
   );
   if (!columns.has('name')) sqlite.exec('ALTER TABLE profile ADD COLUMN name TEXT');
+  if (!columns.has('button_scale_pct'))
+    sqlite.exec('ALTER TABLE profile ADD COLUMN button_scale_pct INTEGER');
 }
 
 declare global {

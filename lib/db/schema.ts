@@ -19,9 +19,13 @@ export const profile = sqliteTable('profile', {
   // Vision is a plain question, not a calibration test.
   vision: text('vision').notNull().default('unknown'),
 
-  // Dexterity: the tap test is the only physical calibration.
+  // Dexterity: the tap test is the only physical calibration, and button size
+  // is the only thing it sets. The grid itself is locked at seven by four.
   tapErrorPx: integer('tap_error_px'),
   gridIndex: integer('grid_index').notNull().default(2),
+  // How much of its cell a button fills, as a percentage. Nullable because it
+  // is added to databases that already exist; readers fall back to the default.
+  buttonScalePct: integer('button_scale_pct'),
   gapPx: integer('gap_px').notNull().default(12),
   iconScale: integer('icon_scale_pct').notNull().default(100),
 

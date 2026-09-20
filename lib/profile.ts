@@ -1,6 +1,12 @@
 import { eq } from 'drizzle-orm';
 import { db, schema } from './db';
-import { presetAt, type GridPreset, type VisionCategory } from './sizing';
+import {
+  BUTTON_SCALE_DEFAULT,
+  clampButtonScale,
+  presetAt,
+  type GridPreset,
+  type VisionCategory,
+} from './sizing';
 import { resolveVoice } from './voice';
 
 /** One communicator, one profile. The row is always id = 1. */
@@ -16,6 +22,8 @@ export interface Profile {
   vision: VisionCategory;
   tapErrorPx: number | null;
   gridIndex: number;
+  /** Fraction of its cell each button fills. The grid itself never changes. */
+  buttonScale: number;
   gapPx: number;
   iconScale: number;
   routine: string;
@@ -27,6 +35,7 @@ export interface Profile {
 export interface LayoutSettings {
   grid: GridPreset;
   gridIndex: number;
+  buttonScale: number;
   gapPx: number;
   iconScale: number;
   vision: VisionCategory;
@@ -45,6 +54,7 @@ export function getProfile(): Profile {
       vision: 'unknown',
       tapErrorPx: null,
       gridIndex: 2,
+      buttonScale: BUTTON_SCALE_DEFAULT,
       gapPx: 12,
       iconScale: 1,
       routine: 'varies',
@@ -63,6 +73,10 @@ export function getProfile(): Profile {
     vision: (row.vision as VisionCategory) ?? 'unknown',
     tapErrorPx: row.tapErrorPx,
     gridIndex: row.gridIndex,
+    buttonScale:
+      row.buttonScalePct == null
+        ? BUTTON_SCALE_DEFAULT
+        : clampButtonScale(row.buttonScalePct / 100),
     gapPx: row.gapPx,
     iconScale: (row.iconScale ?? 100) / 100,
     routine: row.routine,
@@ -81,6 +95,7 @@ export interface ProfileUpdate {
   vision?: VisionCategory;
   tapErrorPx?: number | null;
   gridIndex?: number;
+  buttonScale?: number;
   gapPx?: number;
   iconScale?: number;
   routine?: string;
@@ -101,6 +116,8 @@ export function saveProfile(update: ProfileUpdate): Profile {
   if (update.vision) values.vision = update.vision;
   if ('tapErrorPx' in update) values.tapErrorPx = update.tapErrorPx ?? null;
   if (typeof update.gridIndex === 'number') values.gridIndex = update.gridIndex;
+  if (typeof update.buttonScale === 'number')
+    values.buttonScalePct = Math.round(clampButtonScale(update.buttonScale) * 100);
   if (typeof update.gapPx === 'number') values.gapPx = update.gapPx;
   if (typeof update.iconScale === 'number') values.iconScale = Math.round(update.iconScale * 100);
   if (update.routine) values.routine = update.routine;
@@ -116,6 +133,7 @@ export function getLayout(profile: Profile = getProfile()): LayoutSettings {
   return {
     grid: presetAt(profile.gridIndex),
     gridIndex: profile.gridIndex,
+    buttonScale: profile.buttonScale,
     gapPx: profile.gapPx,
     iconScale: profile.iconScale,
     vision: profile.vision,
