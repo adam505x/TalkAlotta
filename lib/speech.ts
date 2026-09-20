@@ -21,7 +21,22 @@
  */
 
 let audioEl: HTMLAudioElement | null = null;
+let audioCtx: AudioContext | null = null;
+let gainNode: GainNode | null = null;
 let unlocked = false;
+
+/** Caregiver-set loudness, 0–100. Default is full. */
+let volumePercent = 100;
+
+/**
+ * Gain at 100% volume.
+ *
+ * Stays at 1. The server levels every clip to a fixed loudness with headroom, so
+ * the bytes already arrive as loud as they can be without distorting. Raising
+ * this would only clip them — the old multiplier existed to rescue quiet Aura
+ * clips, and that is now handled before the audio is sent.
+ */
+const GAIN_AT_FULL = 1;
 
 /** 30ms of silence, used to unlock audio playback on the first touch. */
 const SILENCE =
@@ -31,10 +46,54 @@ function element(): HTMLAudioElement {
   if (!audioEl) {
     audioEl = new Audio();
     audioEl.preload = 'auto';
-    // Keep playback inline on iOS rather than opening a fullscreen player.
+    audioEl.volume = 1;
     audioEl.setAttribute('playsinline', '');
   }
   return audioEl;
+}
+
+function applyGain(): void {
+  if (!gainNode) return;
+  const pct = Math.max(0, Math.min(100, volumePercent)) / 100;
+  gainNode.gain.value = pct * GAIN_AT_FULL;
+}
+
+function ensureGain(): void {
+  if (gainNode || typeof window === 'undefined') return;
+  try {
+    const AC =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return;
+    audioCtx = new AC();
+    const source = audioCtx.createMediaElementSource(element());
+    gainNode = audioCtx.createGain();
+    applyGain();
+    source.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+  } catch {
+    /* Web Audio unavailable — stay at element volume 1. */
+  }
+}
+
+async function resumeAudioCtx(): Promise<void> {
+  if (audioCtx && audioCtx.state === 'suspended') {
+    try {
+      await audioCtx.resume();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Update playback loudness (0–100). Safe to call before audio is unlocked. */
+export function setSpeechVolume(percent: number): void {
+  volumePercent = Math.max(0, Math.min(100, Math.round(percent)));
+  applyGain();
+}
+
+export function getSpeechVolume(): number {
+  return volumePercent;
 }
 
 /**
@@ -44,6 +103,7 @@ export function unlockAudio(): void {
   if (unlocked) return;
   unlocked = true;
   const el = element();
+  ensureGain();
   try {
     el.src = SILENCE;
     const played = el.play();
@@ -52,6 +112,7 @@ export function unlockAudio(): void {
         /* A blocked unlock is not fatal; the fallback voice still works. */
       });
     }
+    void resumeAudioCtx();
   } catch {
     /* ignore */
   }
@@ -60,7 +121,7 @@ export function unlockAudio(): void {
 const memory = new Map<string, string>();
 const MEMORY_LIMIT = 200;
 
-function remember(text: string, url: string) {
+function remember(key: string, url: string) {
   if (memory.size >= MEMORY_LIMIT) {
     const oldest = memory.keys().next().value;
     if (oldest) {
@@ -69,7 +130,7 @@ function remember(text: string, url: string) {
       memory.delete(oldest);
     }
   }
-  memory.set(text, url);
+  memory.set(key, url);
 }
 
 function browserVoice(text: string): boolean {
@@ -78,6 +139,7 @@ function browserVoice(text: string): boolean {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.95;
+    utterance.volume = Math.max(0, Math.min(1, volumePercent / 100));
     window.speechSynthesis.speak(utterance);
     return true;
   } catch {
@@ -98,32 +160,50 @@ async function logUtterance(text: string, kind: 'word' | 'sentence', boardId?: n
   }
 }
 
+async function playClip(el: HTMLAudioElement, url: string): Promise<void> {
+  ensureGain();
+  await resumeAudioCtx();
+  el.pause();
+  el.src = url;
+  el.playbackRate = 1;
+  el.volume = 1;
+  el.currentTime = 0;
+  await el.play();
+}
+
 export interface SpeakResult {
   spoken: boolean;
-  via: 'elevenlabs' | 'browser' | 'none';
+  via: 'deepgram' | 'browser' | 'none';
   cached?: boolean;
 }
 
 export async function speak(
   text: string,
-  options: { kind?: 'word' | 'sentence'; boardId?: number } = {},
+  options: {
+    kind?: 'word' | 'sentence';
+    boardId?: number;
+    /**
+     * The sentence as separate buttons. The server puts a break between them, and
+     * it cannot work that out from the joined string because a button can itself
+     * be a phrase like "wash hands".
+     */
+    words?: string[];
+  } = {},
 ): Promise<SpeakResult> {
   const clean = text.trim();
   if (!clean) return { spoken: false, via: 'none' };
 
   const kind = options.kind ?? 'word';
+  // v5: clips levelled to a fixed loudness, padded both ends.
+  const memoryKey = `v5:${kind}:${clean}`;
   const el = element();
 
-  // Already fetched this exact text: play it straight away.
-  const held = memory.get(clean);
+  const held = memory.get(memoryKey);
   if (held) {
     try {
-      el.pause();
-      el.src = held;
-      el.currentTime = 0;
-      await el.play();
+      await playClip(el, held);
       void logUtterance(clean, kind, options.boardId);
-      return { spoken: true, via: 'elevenlabs', cached: true };
+      return { spoken: true, via: 'deepgram', cached: true };
     } catch {
       /* fall through to a fresh fetch */
     }
@@ -133,11 +213,15 @@ export async function speak(
     const response = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: clean, kind, boardId: options.boardId }),
+      body: JSON.stringify({
+        text: clean,
+        kind,
+        words: options.words,
+        boardId: options.boardId,
+      }),
     });
 
     if (!response.ok) {
-      // Server could not speak: use the browser voice so something is said.
       const ok = browserVoice(clean);
       void logUtterance(clean, kind, options.boardId);
       return { spoken: ok, via: ok ? 'browser' : 'none' };
@@ -146,13 +230,10 @@ export async function speak(
     const cached = response.headers.get('x-tts-cached') === '1';
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
-    remember(clean, url);
+    remember(memoryKey, url);
 
-    el.pause();
-    el.src = url;
-    el.currentTime = 0;
-    await el.play();
-    return { spoken: true, via: 'elevenlabs', cached };
+    await playClip(el, url);
+    return { spoken: true, via: 'deepgram', cached };
   } catch {
     const ok = browserVoice(clean);
     void logUtterance(clean, kind, options.boardId);
@@ -169,4 +250,16 @@ export function stopSpeaking(): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Drop in-memory clips so a voice or pronunciation change is heard next press. */
+export function clearSpeechMemory(): void {
+  for (const url of memory.values()) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      /* ignore */
+    }
+  }
+  memory.clear();
 }

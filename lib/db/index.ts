@@ -52,6 +52,7 @@ function createTables(sqlite: Database.Database) {
       routine TEXT NOT NULL DEFAULT 'varies',
       voice_id TEXT,
       voice_label TEXT,
+      speech_volume INTEGER NOT NULL DEFAULT 100,
       onboarded_at TEXT,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -181,6 +182,7 @@ function createTables(sqlite: Database.Database) {
   addColumn(sqlite, 'profile', 'name', 'TEXT');
   addColumn(sqlite, 'profile', 'button_scale_pct', 'INTEGER');
   addColumn(sqlite, 'folder_words', 'location', 'TEXT');
+  addColumn(sqlite, 'profile', 'speech_volume', 'INTEGER NOT NULL DEFAULT 100');
 
   // The profile row always exists so reads never have to special-case null.
   sqlite.exec('INSERT OR IGNORE INTO profile (id) VALUES (1)');

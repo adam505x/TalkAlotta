@@ -7,7 +7,7 @@ import {
   type GridPreset,
   type VisionCategory,
 } from './sizing';
-import { resolveVoice } from './voice';
+import { resolveVoice, isDeepgramVoiceId } from './voice';
 
 /** One communicator, one profile. The row is always id = 1. */
 export const PROFILE_ID = 1;
@@ -29,6 +29,8 @@ export interface Profile {
   routine: string;
   voiceId: string | null;
   voiceLabel: string | null;
+  /** 0–100 playback loudness. */
+  speechVolume: number;
   onboarded: boolean;
 }
 
@@ -39,6 +41,11 @@ export interface LayoutSettings {
   gapPx: number;
   iconScale: number;
   vision: VisionCategory;
+}
+
+function clampVolume(n: number): number {
+  if (!Number.isFinite(n)) return 100;
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 export function getProfile(): Profile {
@@ -60,6 +67,7 @@ export function getProfile(): Profile {
       routine: 'varies',
       voiceId: null,
       voiceLabel: null,
+      speechVolume: 100,
       onboarded: false,
     };
   }
@@ -82,6 +90,7 @@ export function getProfile(): Profile {
     routine: row.routine,
     voiceId: row.voiceId,
     voiceLabel: row.voiceLabel,
+    speechVolume: clampVolume(row.speechVolume ?? 100),
     onboarded: Boolean(row.onboardedAt),
   };
 }
@@ -101,6 +110,7 @@ export interface ProfileUpdate {
   routine?: string;
   voiceId?: string | null;
   voiceLabel?: string | null;
+  speechVolume?: number;
   markOnboarded?: boolean;
 }
 
@@ -123,6 +133,7 @@ export function saveProfile(update: ProfileUpdate): Profile {
   if (update.routine) values.routine = update.routine;
   if ('voiceId' in update) values.voiceId = update.voiceId ?? null;
   if ('voiceLabel' in update) values.voiceLabel = update.voiceLabel ?? null;
+  if (typeof update.speechVolume === 'number') values.speechVolume = clampVolume(update.speechVolume);
   if (update.markOnboarded) values.onboardedAt = new Date().toISOString();
 
   db.update(schema.profile).set(values).where(eq(schema.profile.id, PROFILE_ID)).run();
@@ -142,9 +153,14 @@ export function getLayout(profile: Profile = getProfile()): LayoutSettings {
 
 /** The voice this profile speaks with, falling back to the resolved default. */
 export function getVoice(profile: Profile = getProfile()): { voiceId: string; label: string } {
-  if (profile.voiceId) {
-    return { voiceId: profile.voiceId, label: profile.voiceLabel ?? 'Chosen voice' };
+  // Migrate off stale ElevenLabs IDs (or any non-Aura value) to Deepgram Aura.
+  if (isDeepgramVoiceId(profile.voiceId)) {
+    return { voiceId: profile.voiceId!, label: profile.voiceLabel ?? 'Chosen voice' };
   }
+
   const resolved = resolveVoice(profile);
+  if (profile.voiceId !== resolved.voiceId || profile.voiceLabel !== resolved.label) {
+    saveProfile({ voiceId: resolved.voiceId, voiceLabel: resolved.label });
+  }
   return { voiceId: resolved.voiceId, label: resolved.label };
 }

@@ -9,7 +9,7 @@ import { ScenarioSheet } from '@/components/ScenarioSheet';
 import { PictureSheet, type Candidate } from '@/components/PictureSheet';
 import { CaregiverDrawer, type CaregiverAction } from '@/components/CaregiverDrawer';
 import { AddThingSheet, type AddRequest } from '@/components/AddThingSheet';
-import { speak, stopSpeaking, unlockAudio } from '@/lib/speech';
+import { setSpeechVolume, speak, stopSpeaking, unlockAudio } from '@/lib/speech';
 import { NAV_ICONS, timeOfDay, type TimeBucket, type WordRole } from '@/lib/core-words';
 import {
   CORE_COLUMNS,
@@ -58,6 +58,7 @@ interface BoardPayload {
     vision: string;
   };
   voice: { voiceId: string; label: string };
+  speechVolume?: number;
   onboarded: boolean;
 }
 
@@ -147,6 +148,17 @@ export default function BoardPage() {
   });
   const [situation, setSituation] = useState<string | null>(null);
 
+  // The moment the board is reading, as query params. Built once here so the
+  // board load and the reply generator cannot drift apart about where we are.
+  const contextQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (demo.timeBucket) params.set('timeBucket', demo.timeBucket);
+    if (demo.location) params.set('location', demo.location);
+    if (demo.weather) params.set('weather', demo.weather);
+    if (situation) params.set('situation', situation);
+    return params.toString();
+  }, [demo, situation]);
+
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -197,6 +209,11 @@ export default function BoardPage() {
     return () => window.removeEventListener('pointerdown', handler);
   }, []);
 
+  // Loudness is a caregiver setting, so the board has to apply it on load.
+  useEffect(() => {
+    if (typeof data?.speechVolume === 'number') setSpeechVolume(data.speechVolume);
+  }, [data?.speechVolume]);
+
   const layout = data?.layout;
 
   // Called before the loading return, so the hook order never changes. The
@@ -235,12 +252,12 @@ export default function BoardPage() {
 
   const speakAll = useCallback(async () => {
     if (sentence.length === 0) return;
-    const text = sentence.map((w) => w.label).join(' ');
+    const words = sentence.map((w) => w.label);
     stopSpeaking();
     setSpeaking(true);
-    // One call for the whole sentence: it sounds far better than stitching
-    // single words together, and the cache means a repeated sentence is free.
-    const result = await speak(text, { kind: 'sentence' });
+    // The buttons go over as a list, not a joined string, so the server can leave
+    // a short break between them. It still comes back as one clip.
+    const result = await speak(words.join(' '), { kind: 'sentence', words });
     setSpeaking(false);
     if (result.via === 'browser') setVoiceNote('built-in browser voice');
   }, [sentence]);
@@ -671,6 +688,7 @@ export default function BoardPage() {
         <ScenarioSheet
           recommended={data.recommended}
           current={situation}
+          contextQuery={contextQuery}
           busy={busy}
           error={actionError}
           onPick={(next) => void applySituation(next)}
