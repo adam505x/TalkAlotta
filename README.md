@@ -12,13 +12,112 @@ Everything above those folders never moves.
 
 Built for the caregiver, learns with the communicator.
 
+## Try it
+
+**<https://talkalotta-production.up.railway.app/board>**
+
+It opens on setup the first time. If you want to skip straight to the board and
+poke at it, answer the questions quickly — none of them are required to be
+accurate, and everything can be changed afterwards from Settings.
+
+## Who built this, and why
+
+TalkAlotta was built by **Adam McIntyre**, **Liam Maher** and **Josie Burke**,
+three students at University College Dublin. We flew to Boston to build it for
+HackMIT 2026.
+
+We each have family members and friends who use AAC boards, so this was personal
+rather than chosen off a list of ideas. We know the difficulties first hand: the
+conversation that ends because the answer was four folders deep and somebody
+answered on your behalf; the board that is perfect at home and useless in a cafe;
+the two hundred and fifty dollar price tag on the app that does it best. Those
+three things are what this project is aimed at, in that order.
+
+## How it works
+
+Setup asks a short series of questions about the communicator, one per page: age,
+gender, nationality, eyesight, colour vision, and a tapping exercise that measures
+how far off target a tap lands. Those answers set the size of every button, the
+space between them, the palette, and the accent of the voice.
+
+The board that opens is in two halves.
+
+**The top three rows never change.** Four pages of core vocabulary, the same words
+in the same places every time, with yes, no, back and next in fixed corners. This
+is the half a communicator learns by muscle memory, and nothing the app does is
+allowed to move it.
+
+**The strip underneath changes constantly.** It holds the situation button and
+four folders — people, doing, things, describing — and what is inside those four
+is worked out from the moment: the time of day, where the person is, the weather,
+and any activity a caregiver has typed or spoken in. At a Chick-fil-A they fill
+with server, order, sandwich, chips and salty. On a tennis court, coach, serve,
+racket and fast. The same park gives a slide and sand when it is sunny and a
+puddle, an umbrella and slippery when it is raining. The four folders themselves
+never move or change in number, so only the contents are ever new.
+
+Pressing a word speaks it through Deepgram and adds it to the sentence bar.
+Pressing the bar speaks the whole sentence as one utterance, so it carries real
+intonation instead of sounding like a list of words read out.
+
+Behind the situation button there is a second tab: **conversation mode**. Turn it
+on and the board listens to the person talking *to* the communicator, and puts six
+replies on screen that they can press. The words are generated; the positions are
+fixed.
+
+## What is in it
+
+- **Onboarding that sets the whole board.** One question per page, and a tap test
+  that sets button size and spacing together, because for someone with a tremor
+  the gap prevents mis-taps as much as the size does.
+- **Context-aware folders.** Four folders that refill from place, time, weather
+  and a described situation, cached so returning somewhere shows the same words.
+- **Conversation mode.** Listens to the other person and offers replies, with a
+  guaranteed refusal in a fixed position on every turn.
+- **Custom voice.** Age, gender and nationality resolve to a Deepgram Aura voice
+  and accent, changeable afterwards.
+- **Your own buttons.** Add a word to any folder; a picture is found for it, and a
+  word with no usable picture is refused rather than added blank.
+- **Your own pictures.** Upload a photo for any word from the picture sheet. It is
+  pinned to that word everywhere, not just where it was changed.
+- **Custom phrases.** Pin a whole sentence as a single button, so something said
+  often is one press instead of six.
+- **Colour blind mode.** Setup asks about colour vision separately from eyesight,
+  and the palette changes rather than the layout.
+- **Adjustable spacing and size.** Button scale and gap are set by the tap test
+  and adjustable afterwards from the Settings panel.
+- **Analytics for caregivers.** Every press, folder open and deletion is recorded,
+  and the dashboard turns that into what is actually being used and what is not.
+- **Edit mode.** Tapping a word opens its picture chooser instead of speaking it,
+  so a caregiver can fix the board while looking at the board.
+
 ## Running it locally
 
-Everything is already installed and the keys are already in `.env`.
+### The keys you need
+
+Copy `.env.example` to `.env` and fill it in. Only the first two are
+load-bearing, and the app degrades rather than crashing without either:
+
+| Key | Where to get it | What breaks without it |
+|---|---|---|
+| `DEEPGRAM_API_KEY` | <https://console.deepgram.com> — free credit on signup | Speech falls back to the browser's own voice; the microphone and conversation mode stop working |
+| `ANTHROPIC_API_KEY` | <https://console.anthropic.com> | The four folders fall back to a generic word list, and conversation mode offers generic replies |
+| `OPENSYMBOLS_SECRET` | <https://www.opensymbols.org> | The fallback picture library throws rather than degrading, so leave `SYMBOL_SEARCH=legacy` and expect ARASAAC to carry it |
+| `ELASTIC_NODE`, `ELASTIC_API_KEY` | <https://cloud.elastic.co> | Nothing — only needed if you set `SYMBOL_SEARCH=elastic` |
+
+`ANTHROPIC_MODEL` defaults to `claude-haiku-4-5`, which is the right trade for
+this: the folders and the replies both need to be fast more than they need to be
+clever.
+
+Then:
 
 ```bash
+npm install
 npm run dev
 ```
+
+If you are on the team, everything is already installed and the keys are already
+in `.env`, so `npm run dev` is the whole of it.
 
 Open <http://localhost:3000>. First run goes to setup; after that it goes
 straight to the board.
@@ -417,6 +516,107 @@ the same button dozens of times a day. A clip that came back inaudible is refuse
 rather than cached, since caching one turns a bad render into a permanently dead
 button.
 
+## The research behind it
+
+Almost nothing here is invented. The field has published most of these answers
+already, and the interesting part was finding out which of our instincts the
+evidence contradicted.
+
+**Why most of the board is static.** The best-replicated finding in AAC is that a
+small set of words does most of the work: roughly fifty words cover 40 to 50 per
+cent of daily communication, a hundred cover about 60, and two to four hundred
+cover about 80. It holds across ages, populations and settings — Banajee, DiCarlo
+and Buras Stricklin (2003) on toddlers, Beukelman et al. (1984, 1989), Balandin
+and Iacono (1998, 1999) on workplace conversation, Deckers et al. (2017) on Down
+syndrome. If a handful of words carry most of what someone says, those words
+should be in the same place every single time, because that is what lets a
+communicator reach them without looking. Moving them to be clever would cost more
+than the cleverness is worth.
+
+**Which core words.** The fixed pages carry all thirty-six words of the
+**Universal Core vocabulary** from the Center for Literacy and Disability Studies
+at UNC Chapel Hill, which is published CC BY 4.0 and free to use commercially with
+attribution. We added yes, no, again, wait, eat, drink, play, sleep, wash, please,
+thank you, sorry and my turn on top of it.
+
+**Why the colours work the way they do.** Light, Wilkinson, Thiessen, Beukelman
+and Fried-Oken (2019) review the eye-tracking programme behind display design, and
+two findings shaped this board directly. Clustering symbols by their internal
+colour makes target search significantly faster than distributing them
+(Wilkinson et al., 2008), which is why like-coloured words sit together rather
+than being scattered. And background colour cues do **not** help on small displays
+— no measurable effect on time-to-fixate or response — so we colour the symbol,
+not the cell, and every tile carries the same single subtle border. Spatial
+grouping beats plain row-and-column order (Wilkinson et al., 2017), which is why
+folders sit beside the words they extend rather than being gathered into a corner.
+Wilkinson, Zimmerman and Light (2021), across fifty-five participants spanning
+autism, Down syndrome, intellectual disability and typical development, found that
+a persistent navigation bar earns its visual cost, which is why back, next, yes
+and no keep reserved cells on every screen.
+
+**Why the layout adapts at all.** This is the finding that justifies the whole
+project. AAC vocabulary is organised taxonomically (People, Places, Things),
+schematically (by event: "at the park", "bath time"), semantically, or as visual
+scenes. The evidence favours **schematic** organisation, especially for young
+children: Drager et al. (2003) found children located more vocabulary in an
+integrated-scene condition than in a taxonomic grid; Lucariello et al. (1992)
+found four-year-olds rely primarily on schematic knowledge, with conventional
+category use developing around seven. Most shipping AAC apps are taxonomic, which
+is the scheme the research says works worst for exactly the children who need it
+most. A board for "at the park" is textbook schematic organisation. We are not
+inventing a scheme — we are automating the one the field already prefers, which
+until now had to be hand-built per activity by a caregiver or a speech and
+language therapist.
+
+**Why symbols need a caregiver's eye.** Díez et al. (2024) published transparency
+and translucency norms for 1,525 ARASAAC pictograms rated by 521 participants.
+Mean transparency was low (0.39) but translucency high (6.33): symbols are mostly
+*not* guessable cold, but make sense once explained. More pointedly, there was a
+53.2 per cent discrepancy between the names participants gave a pictogram and its
+official ARASAAC label. Half the time the label does not match what people
+actually see, which is why confidence scoring exists and why anything below the
+threshold goes to the caregiver rather than being placed silently.
+
+**Why conversation mode always offers a refusal.** Valencia et al. (CHI 2023)
+found AAC users want speed but raise serious concerns about loss of voice and
+agency when a model puts words in their mouth. Mao, Lee, Faroqi-Shah and Valencia
+(2025) found that AI-generated errors are more damaging than a user's own errors,
+and that trust depends on accurate intent recognition *plus* flexible user
+control. That is the entire argument for generating the words but freezing the
+positions, and for guaranteeing that "no" is always reachable in the same place.
+
+## Where this is new
+
+Context-aware AAC is not a new idea, but nobody has shipped it.
+
+Kane, Linam-Church, Althoff and McCall built **TalkAbout** in 2012 (ASSETS), an
+AAC tool for people with aphasia that organised vocabulary by location and by
+conversation partner instead of by topic hierarchy. It was a research prototype:
+five participants, six weeks, no rigorous comparison against non-adaptive AAC. That
+gap sat open for fourteen years.
+
+It closed in January 2026. Griffen, Raley, Holyfield, MacNeil, Lorah and Burns
+published an ABAB reversal study in the *Journal of Special Education Technology*
+on context-aware AAC generating response options from communication-partner input,
+with three autistic preschoolers. All participants communicated more frequently,
+more accurately and faster. That is the study conversation mode implements.
+
+So the shape of our claim is narrow and, we think, true: context-aware AAC was
+prototyped in 2012, first shown to work in a controlled design eight months ago,
+and no commercial product does it. Proloquo2Go costs $249.99 largely because of
+proprietary symbol licensing (SymbolStix, PCS) and licensed voices paid per
+install — a structural cost, not a research moat. Building on openly licensed
+symbols removes the largest recurring cost line, which is the honest answer to why
+nobody has done this cheaper.
+
+The second thing we think is new is adapting to the **disability** and not only
+the situation. Setup measures tap accuracy and asks about eyesight and colour
+vision separately, and those answers change button size, spacing, palette and
+contrast before the communicator presses anything. Most AAC apps ship one board
+and leave that tuning to a therapist.
+
+Full notes, with links to every paper, are in `claude/aac-research-evidence-base.md`.
+
 ## Accessibility
 
 - Setup asks one question per page. A caregiver who is not especially technical
@@ -465,13 +665,20 @@ and get what that business actually sells.
   which it now has.
 - **A therapist review of the starter vocabulary.**
 
-## Deployment note
+## Deployment
 
-The database is a local SQLite file, so it needs a real filesystem. That works
-locally and on any always-on host. A serverless deploy cannot keep it, so a hosted
-copy would start empty on each cold start. Everything goes through
-`lib/db/index.ts`, so moving to a networked SQLite such as Turso is a change to
-that one file.
+Live at **<https://talkalotta-production.up.railway.app/board>**, on Railway.
+
+The database is a SQLite file and it always lives in `./data` — only the filename
+is configurable, through `DATABASE_FILE`, which keeps the path statically scoped
+so the bundler does not trace the whole project into the server output. That means
+a host needs a real filesystem that survives a restart: Railway has a volume
+mounted at `/app/data`, and a serverless deploy would start empty on every cold
+start. Everything goes through `lib/db/index.ts`, so moving to a networked SQLite
+such as Turso is a change to that one file.
+
+Tables are created and migrated on first use, so a fresh deployment needs no
+migration step.
 
 ## Picture credits, and one licensing catch
 
@@ -485,8 +692,10 @@ commercial release is Mulberry, which is CC BY-SA and already reachable through
 the OpenSymbols client: reorder `SOURCE_TRUST` in `lib/symbol-search.ts` to put
 `mulberry` first.
 
-## Keys
+## A note on our own keys
 
-`.env` is gitignored and holds the Deepgram, Anthropic, OpenSymbols and Elastic
-credentials. Several of them have been pasted into chat transcripts at some point,
-so treat them as exposed and rotate them after the event.
+`.env` is gitignored, and the keys listed at the top of this file are the ones it
+holds. Several of ours have been pasted into chat transcripts at some point during
+the build, so we are treating them as exposed and rotating them after the event.
+If you are running your own copy, get your own from the links above — none of ours
+are in this repository.
