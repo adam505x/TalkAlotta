@@ -26,6 +26,9 @@ function Chevron({ open }: { open: boolean }) {
  * Type to narrow the list, or open it and scroll. Whatever is typed stands on
  * its own, so a region that is not on the list is still a valid answer.
  */
+/** Tallest the list ever gets, before the space actually available caps it. */
+const LIST_MAX_HEIGHT = 320;
+
 export function CountrySelect({
   value,
   onChange,
@@ -37,11 +40,33 @@ export function CountrySelect({
 }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  // The field can sit anywhere on the screen, and the page itself never
+  // scrolls, so a list that always dropped downwards would be cut off by the
+  // bottom edge. It opens into whichever side has the room.
+  const [placement, setPlacement] = useState({ up: false, maxHeight: LIST_MAX_HEIGHT });
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const listId = useId();
 
   const matches = useMemo(() => searchCountries(value), [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      const rect = wrapperRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 16;
+      const above = rect.top - 16;
+      const up = below < Math.min(LIST_MAX_HEIGHT, above);
+      setPlacement({
+        up,
+        maxHeight: Math.max(160, Math.min(LIST_MAX_HEIGHT, up ? above : below)),
+      });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -133,11 +158,14 @@ export function CountrySelect({
           id={listId}
           role="listbox"
           aria-label="Countries"
-          className="absolute inset-x-0 top-full z-30 mt-2 max-h-[320px] overflow-y-auto rounded-[14px] py-1"
+          className={`absolute inset-x-0 z-30 overflow-y-auto rounded-[14px] py-1 ${
+            placement.up ? 'bottom-full mb-2' : 'top-full mt-2'
+          }`}
           style={{
             border: '1px solid var(--line)',
             background: 'var(--card)',
             boxShadow: '0 12px 32px rgb(0 0 0 / 0.14)',
+            maxHeight: placement.maxHeight,
           }}
         >
           {matches.length === 0 ? (

@@ -158,8 +158,8 @@ function Guide({
 }) {
   return (
     <div
-      className={`type-body flex flex-col gap-3 ${
-        wide ? 'max-w-none' : 'max-w-[62ch]'
+      className={`type-body-lg flex flex-col gap-3 ${
+        wide ? 'max-w-none' : 'max-w-[54ch]'
       } ${center ? 'mx-auto text-center' : ''}`}
       style={{ color: 'var(--ink-soft)' }}
     >
@@ -197,17 +197,19 @@ function StepLayout({
 }) {
   // The action sits below both columns rather than inside one of them, so it
   // lands in the middle of the screen in landscape instead of off under the
-  // answers. Width is capped so it stays a button rather than a banner.
+  // answers. Width is capped so it stays a button rather than a banner, and the
+  // same bottom inset is used on every step so it never appears to move between
+  // questions.
   const footer = (
-    <div className="flex shrink-0 justify-center">
+    <div className="flex shrink-0 justify-center pb-2 lg:pb-5">
       <div className="w-full max-w-md">{action}</div>
     </div>
   );
 
   if (wide) {
     return (
-      <section className="flex min-h-0 flex-1 flex-col gap-3">
-        <h2 className="type-title shrink-0">{title}</h2>
+      <section className="flex min-h-0 flex-1 flex-col gap-4">
+        <h2 className="type-question shrink-0">{title}</h2>
         <div className="shrink-0">{guide}</div>
         <div className="min-h-0 flex-1">{children}</div>
         {footer}
@@ -218,10 +220,12 @@ function StepLayout({
   if (center) {
     return (
       <section className="flex min-h-0 flex-1 flex-col gap-5">
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
-          <h2 className="type-title shrink-0 text-center">{title}</h2>
-          <div className="w-full max-w-lg shrink-0">{guide}</div>
-          <div className="w-full max-w-lg shrink-0">{children}</div>
+        {/* Sat a little above the true centre: optically centred rather than
+            measured centre, and it leaves the room a dropped-open list needs. */}
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 pb-6 lg:pb-10">
+          <h2 className="type-question shrink-0 text-center">{title}</h2>
+          <div className="w-full max-w-xl shrink-0">{guide}</div>
+          <div className="w-full max-w-xl shrink-0">{children}</div>
         </div>
         {footer}
       </section>
@@ -230,15 +234,24 @@ function StepLayout({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,auto)_minmax(0,1fr)] gap-5 lg:grid-cols-2 lg:grid-rows-1 lg:gap-10">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,auto)_minmax(0,1fr)] gap-5 lg:grid-cols-2 lg:grid-rows-1 lg:gap-12">
         {/* Both columns get a safety valve. Nothing here should ever need it at
             iPad size, but clipped-and-unreachable is strictly worse than a short
-            scroll inside one column, and the page itself still cannot move. */}
-        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
-          <h2 className="type-title shrink-0">{title}</h2>
-          {guide}
+            scroll inside one column, and the page itself still cannot move.
+            min-h-full on the inner block is what centres short content against
+            the answers without breaking that scroll when content is tall. */}
+        <div className="flex min-h-0 flex-col overflow-y-auto">
+          <div className="flex min-h-full flex-col gap-4 lg:justify-center">
+            <h2 className="type-question">{title}</h2>
+            {guide}
+          </div>
         </div>
-        <div className={`min-h-0 ${scrollAnswer ? 'overflow-y-auto' : ''}`}>{children}</div>
+        <div className={`min-h-0 ${scrollAnswer ? 'overflow-y-auto' : ''}`}>
+          {/* Centred against the question beside it in landscape. Stacked in
+              portrait the question is above, so the answers stay up against it
+              rather than drifting into the middle of what is left. */}
+          <div className="flex min-h-full flex-col lg:justify-center">{children}</div>
+        </div>
       </div>
       {footer}
     </section>
@@ -490,8 +503,12 @@ export default function OnboardingPage() {
   const stepNumber = stepIndex + 1;
 
   return (
-    <div className="page-light h-dvh overflow-hidden">
-    <main className="safe-top safe-bottom mx-auto flex h-full w-full max-w-6xl flex-col gap-4 overflow-hidden p-5 lg:gap-5 lg:p-6">
+    /* The device safe-area insets sit on the wrapper, not on main. As plain
+       unlayered rules they beat any padding utility on the same element, so on
+       main they cancelled its page padding outright and pinned the header and
+       the button to the screen edges. Here they add to it instead. */
+    <div className="page-light safe-top safe-bottom h-dvh overflow-hidden">
+    <main className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4 overflow-hidden p-5 lg:gap-5 lg:p-6">
       <header className="flex shrink-0 flex-col gap-3">
         <p
           className="text-[13px] font-semibold uppercase"
@@ -537,9 +554,12 @@ export default function OnboardingPage() {
       {/* Keyed on the step so each question cross-fades and rises in. Enter and
           exit share the one path, and reduced motion drops the travel. */}
       <div key={step} className="step-enter flex min-h-0 flex-1 flex-col">
+      {/* One column on the centre line, held above the true middle so the title,
+          the explanation and the button read as one block rather than three
+          things spread down the screen. */}
       {step === 'intro' ? (
-        <section className="flex min-h-0 flex-1 flex-col justify-center gap-5">
-          <h2 className="type-display text-center">
+        <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 pb-10 lg:pb-16">
+          <h2 className="type-display max-w-[26ch] text-center">
             Let us set the board up together
           </h2>
           <Guide center>
@@ -553,11 +573,9 @@ export default function OnboardingPage() {
               Settings, and none of it is sent anywhere outside this device.
             </p>
           </Guide>
-          <div className="flex justify-center">
-            <Button size="xl" className="w-full max-w-md" onClick={() => goto('profile_age')}>
-              Start
-            </Button>
-          </div>
+          <Button size="xl" className="w-full max-w-md" onClick={() => goto('profile_age')}>
+            Start
+          </Button>
         </section>
       ) : null}
 
@@ -648,8 +666,12 @@ export default function OnboardingPage() {
         <StepLayout
           title="Which country or region?"
           scrollAnswer={false}
+          // A single field, not a list of choices. Two columns would leave one of
+          // them nearly empty, so this one stacks on the centre line: question,
+          // explanation, field, all on the same axis.
+          center
           guide={
-            <Guide>
+            <Guide center>
               <p>
                 This sets the accent of the speaking voice. An accent that matches the people
                 around them is easier for family, classmates and staff to follow, and it keeps the
@@ -797,57 +819,49 @@ export default function OnboardingPage() {
             </Guide>
           }
           action={
-            <button
-              type="button"
-              className="w-full text-center text-sm font-semibold underline"
-              onClick={skipTap}
-            >
+            <Button variant="ghost" size="lg" className="w-full" onClick={skipTap}>
               Skip this for now
-            </button>
+            </Button>
           }
         >
           <div
             ref={surfaceRef}
             onPointerDown={recordTap}
-            className="relative h-full w-full overflow-hidden rounded-2xl border-4"
-            style={{ borderColor: 'var(--line)', background: 'var(--card)', touchAction: 'none' }}
+            className="tap-surface relative h-full w-full overflow-hidden"
+            style={{ touchAction: 'none' }}
             role="button"
             tabIndex={0}
             aria-label={`Tap target ${tapIndex + 1} of ${TAP_TARGETS.length}`}
           >
-            {/* Dead-zone falloff: the centre is the real target, fading out to nothing. */}
+            {/* One wrapper on the measured point. The falloff, the tolerance
+                edge and the core all stack on its single grid cell, so they
+                cannot drift apart from each other or from the point a tap is
+                actually measured against. */}
             <span
+              key={`${tapIndex}-target`}
               aria-hidden="true"
-              className="absolute rounded-full"
-              style={{
-                left: `${TAP_TARGETS[tapIndex].x * 100}%`,
-                top: `${TAP_TARGETS[tapIndex].y * 100}%`,
-                transform: 'translate(-50%, -50%)',
-                width: TAP_DEAD_ZONE_RADIUS * 2,
-                height: TAP_DEAD_ZONE_RADIUS * 2,
-                background:
-                  'radial-gradient(circle, color-mix(in srgb, var(--role-modifier-line) 35%, transparent) 0%, color-mix(in srgb, var(--role-modifier-line) 12%, transparent) 55%, transparent 100%)',
-              }}
-            />
-            {/* The actual target, with a visible outline. Pops on every tap. */}
-            <span
-              key={`${tapIndex}-outline`}
-              aria-hidden="true"
-              className="absolute rounded-full"
-              style={{
-                left: `${TAP_TARGETS[tapIndex].x * 100}%`,
-                top: `${TAP_TARGETS[tapIndex].y * 100}%`,
-                // Must match the falloff ring's centring. Without it the box is
-                // hung from its top-left corner and sits a radius down and right
-                // of the point taps are actually measured against.
-                transform: 'translate(-50%, -50%)',
-                width: TAP_CORE_RADIUS * 2,
-                height: TAP_CORE_RADIUS * 2,
-                background: 'var(--role-modifier-bg)',
-                border: '6px solid var(--role-modifier-line)',
-                animation: tapFeedback ? 'tap-target-pop 260ms ease-out' : undefined,
-              }}
-            />
+              className="tap-target"
+              style={
+                {
+                  left: `${TAP_TARGETS[tapIndex].x * 100}%`,
+                  top: `${TAP_TARGETS[tapIndex].y * 100}%`,
+                  '--tap-core': `${TAP_CORE_RADIUS * 2}px`,
+                  '--tap-zone': `${TAP_DEAD_ZONE_RADIUS * 2}px`,
+                } as React.CSSProperties
+              }
+            >
+              <span className="tap-target__falloff" />
+              <span className="tap-target__tolerance" />
+              {/* Core, crosshair and centre dot pop together, as one mark. */}
+              <span
+                className="tap-target__mark"
+                style={{ animation: tapFeedback ? 'tap-core-pop 260ms ease-out' : undefined }}
+              >
+                <span className="tap-target__core" />
+                <span className="tap-target__crosshair" />
+                <span className="tap-target__dot" />
+              </span>
+            </span>
             {/* Transient feedback at the actual tap point: green pop for a hit,
                 red for a miss just outside the target. */}
             {tapFeedback ? (
@@ -866,9 +880,27 @@ export default function OnboardingPage() {
                 }}
               />
             ) : null}
-            <span className="absolute bottom-3 left-1/2 -translate-x-1/2 text-sm font-semibold">
-              {tapIndex + 1} of {TAP_TARGETS.length}
-            </span>
+            {/* Position tells the caregiver how far through they are without
+                putting a second thing to read next to the target. Ignores
+                pointers so a tap here still counts as a tap on the surface. */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex flex-col items-center gap-2">
+              <div className="flex gap-2">
+                {TAP_TARGETS.map((_, i) => (
+                  <span
+                    key={i}
+                    className={`tap-pip ${
+                      i < tapIndex ? 'tap-pip--done' : i === tapIndex ? 'tap-pip--current' : ''
+                    }`}
+                  />
+                ))}
+              </div>
+              <span
+                className="type-footnote font-semibold tabular-nums"
+                style={{ color: 'var(--ink-soft)' }}
+              >
+                {tapIndex + 1} of {TAP_TARGETS.length}
+              </span>
+            </div>
           </div>
         </StepLayout>
       ) : null}
@@ -979,7 +1011,7 @@ export default function OnboardingPage() {
       ) : null}
 
       {step === 'done' ? (
-        <section className="flex min-h-0 flex-1 flex-col justify-center gap-5">
+        <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 pb-10 lg:pb-16">
           <h2 className="type-display text-center">Ready</h2>
           <Guide center>
             <p>The board is set to {describePreset(gridIndex)}.</p>
@@ -1056,28 +1088,29 @@ export default function OnboardingPage() {
               </span>
             </label>
 
-            {/* A live preview at the chosen size, so the choice is visible not described. */}
+            {/* A live preview at the chosen size, so the choice is visible not
+                described. Every cell carries the board's own tile shape, so the
+                sliders change how big the buttons are and how far apart they
+                sit, and can never stretch a button into a long rectangle the
+                board would never draw. The frame keeps its height across
+                presets so the sheet does not jump while a slider is dragged. */}
             <div
-              className="grid rounded-xl p-2"
-              style={{
-                border: '1px solid var(--line)',
-                gridTemplateColumns: `repeat(${GRID_PRESETS[gridIndex].cols}, minmax(0, 1fr))`,
-                gap: `${gapPx}px`,
-                height: 180,
-              }}
+              className="flex items-center justify-center rounded-xl p-3"
+              style={{ border: '1px solid var(--line)', minHeight: 180 }}
             >
-              {Array.from({
-                length: GRID_PRESETS[gridIndex].cols * GRID_PRESETS[gridIndex].rows,
-              }).map((_, i) => (
-                <span
-                  key={i}
-                  className="rounded-lg border-2"
-                  style={{
-                    background: 'var(--role-object-bg)',
-                    borderColor: 'var(--role-object-line)',
-                  }}
-                />
-              ))}
+              <div
+                className="grid w-full"
+                style={{
+                  gridTemplateColumns: `repeat(${GRID_PRESETS[gridIndex].cols}, minmax(0, 1fr))`,
+                  gap: `${gapPx}px`,
+                }}
+              >
+                {Array.from({
+                  length: GRID_PRESETS[gridIndex].cols * GRID_PRESETS[gridIndex].rows,
+                }).map((_, i) => (
+                  <span key={i} className="cell-preview" />
+                ))}
+              </div>
             </div>
 
             <Button
