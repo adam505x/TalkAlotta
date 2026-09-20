@@ -568,6 +568,9 @@ input[type="range"]::-moz-range-thumb {
    type, which is what keeps a board of mixed colours calm to look at.
 -------------------------------------------------------------------------- */
 .cell {
+  /* One line colour for the tile and, on a folder, for its lip and body too, so
+     the three pieces of a folder can never drift apart. */
+  --tile-line: rgba(12, 14, 18, 0.18);
   aspect-ratio: 1 / 0.92;
   position: relative;
   display: flex;
@@ -578,7 +581,8 @@ input[type="range"]::-moz-range-thumb {
   padding: 4px;
   min-width: 0;
   min-height: 0;
-  border: 3px solid rgba(12, 14, 18, 0.18);
+  background: var(--face);
+  border: 3px solid var(--tile-line);
   border-radius: var(--tile-radius);
   font: inherit;
   cursor: pointer;
@@ -619,18 +623,77 @@ input[type="range"]::-moz-range-thumb {
   text-align: center;
 }
 
-/* The only thing that marks a folder: a tab on its top edge, drawn in the same
-   subtle tone as the tile border. Absolutely positioned, so a folder is exactly
-   the same size as every other tile. */
-.cell__tab {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 6px;
-  width: 42%;
-  border-bottom-right-radius: 6px;
-  background: rgba(12, 14, 18, 0.28);
+/* ---------------------------------------------------------- folder tiles ----
+   A folder is drawn as a folder: a lip on the top left with the body hanging
+   underneath it, both in the same face colour as the words the folder holds.
+
+   The whole shape is drawn INSIDE the tile's existing footprint. The button
+   keeps the same aspect-ratio, so a folder still occupies one grid cell of
+   exactly the same size as every word tile and the rows stay aligned. What
+   changes is only what gets painted: the button stops painting itself, and the
+   lip and the body paint instead.
+
+   Giving the lip its height off the top is also what makes the body read as a
+   folder rather than as a square, because the body comes out wider than it is
+   tall. That is the shape doing the work, not a decoration on top of a square.
+-------------------------------------------------------------------------- */
+.cell--folder {
+  background: none;
+  border: none;
+  padding: 0;
+  gap: 0;
+  align-items: stretch;
+  justify-content: flex-start;
 }
+
+.cell__lip {
+  flex: none;
+  /* Sized off WIDTH, never off height. The tile's height comes from its
+     aspect-ratio, and a percentage height resolved against that is the exact
+     chain that made the setup size preview vanish. A percentage width resolves
+     against a definite width, and aspect-ratio turns it into the height. */
+  display: block;
+  width: 46%;
+  aspect-ratio: 46 / 14;
+  /* Eats the body's top border, so the lip and the body read as one piece of
+     card rather than as two boxes stacked up. */
+  margin-bottom: -3px;
+  border: 3px solid var(--tile-line);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: var(--face);
+}
+
+/* The body carries everything the tile used to carry itself. Its top left
+   corner is square, because that is the corner the lip lands on. */
+.cell__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  border: 3px solid var(--tile-line);
+  border-radius: 0 var(--tile-radius) var(--tile-radius) var(--tile-radius);
+  background: var(--face);
+}
+
+/* The picture is pulled in a little, because the body is shorter than a word
+   tile and a full-bleed picture crowds the lip. Percentage padding resolves
+   against width on BOTH axes, so the inset stays in proportion at every button
+   size rather than eating a short body alive on a small board. */
+.cell--folder .cell__img {
+  padding: 5% 9%;
+}
+
+/* Clear of the lip, so the pencil sits on the body and not in the notch beside
+   it, where it would float on the board background. */
+.cell--folder .cell__edit-mark {
+  top: calc(15% + 4px);
+}
+
 /* The setup size preview: a miniature of the locked front board.
 
    Seven across and four down, always. The grid has NO gap, so every cell sits

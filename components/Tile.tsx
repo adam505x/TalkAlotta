@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, type CSSProperties } from 'react';
 import { cn } from '@/lib/cn';
 import type { TileVariant, WordRole } from '@/lib/core-words';
 
@@ -10,9 +10,14 @@ import type { TileVariant, WordRole } from '@/lib/core-words';
  * EVERY tile is the same box and the same size. Same border, same padding, same
  * picture area, same label, same colours.
  *
- * A folder is not a different-looking object. It takes its colour from what is
- * inside it, exactly like a word, and the ONLY thing marking it as a folder is a
- * small tab on its top edge. Nothing about a folder changes its size.
+ * A folder takes its colour from what is inside it, exactly like a word, and is
+ * drawn as a folder: a lip on the top left with the body hanging under it.
+ *
+ * That shape is drawn INSIDE the same box. A folder occupies exactly one grid
+ * cell of exactly the same size as every word tile, so nothing a folder does can
+ * move a word. The body is shorter than a word tile because the lip takes its
+ * height off the top, which is what makes a folder read as a folder, and is why
+ * its picture is inset a little.
  *
  * Accessibility decisions baked in here:
  *
@@ -54,7 +59,7 @@ const ROLE_FACES: Record<WordRole, Face> = {
 /**
  * A folder is deliberately absent here: it takes the colour of the words inside
  * it, so it sits in the same colour block as the words it extends, and is marked
- * as a folder only by the tab on its top edge.
+ * as a folder by its shape alone.
  */
 const VARIANT_FACES: Partial<Record<TileVariant, Face>> = {
   scenario: { bg: 'var(--teal)', fg: 'var(--teal-ink)' },
@@ -98,6 +103,21 @@ export function Tile({
   const face = VARIANT_FACES[variant] ?? ROLE_FACES[role] ?? ROLE_FACES.noun;
   const isFolder = variant === 'folder';
 
+  const picture = imageUrl ? (
+    <img src={imageUrl} alt="" draggable={false} className="cell__img" />
+  ) : (
+    <span aria-hidden="true" className="cell__placeholder" />
+  );
+
+  const text = (
+    <span
+      className="cell__label"
+      style={{ fontSize: `clamp(11px, ${1.35 * iconScale}vw, ${Math.round(17 * iconScale)}px)` }}
+    >
+      {label}
+    </span>
+  );
+
   const describedAs =
     variant === 'folder'
       ? `${label}, folder`
@@ -111,23 +131,23 @@ export function Tile({
       onClick={handle}
       disabled={disabled}
       aria-label={editable ? `${describedAs}, change the picture` : describedAs}
-      className={cn('cell', className)}
-      style={{ background: face.bg, color: face.fg }}
+      className={cn('cell', isFolder && 'cell--folder', className)}
+      style={{ '--face': face.bg, color: face.fg } as CSSProperties}
     >
-      {isFolder ? <span aria-hidden="true" className="cell__tab" /> : null}
-
-      {imageUrl ? (
-        <img src={imageUrl} alt="" draggable={false} className="cell__img" />
+      {isFolder ? (
+        <>
+          <span aria-hidden="true" className="cell__lip" />
+          <span className="cell__body">
+            {picture}
+            {text}
+          </span>
+        </>
       ) : (
-        <span aria-hidden="true" className="cell__placeholder" />
+        <>
+          {picture}
+          {text}
+        </>
       )}
-
-      <span
-        className="cell__label"
-        style={{ fontSize: `clamp(11px, ${1.35 * iconScale}vw, ${Math.round(17 * iconScale)}px)` }}
-      >
-        {label}
-      </span>
 
       {editable ? (
         <span aria-hidden="true" className="cell__edit-mark">
