@@ -101,13 +101,13 @@ export function CaregiverDrawer({
             onClick={onClose}
             aria-label="Close caregiver mode"
             className="min-h-[44px] px-2 text-xl font-bold"
-            style={{ color: '#6c727b' }}
+            style={{ color: 'var(--ink-soft)' }}
           >
             &#10005;
           </button>
         </div>
 
-        <p className="text-xs font-semibold" style={{ color: '#6c727b' }}>
+        <p className="text-xs font-semibold" style={{ color: 'var(--ink-soft)' }}>
           The board stays visible, so you can make changes while looking at it.
         </p>
 
@@ -119,20 +119,20 @@ export function CaregiverDrawer({
         */}
         <section
           className="flex flex-col gap-2 rounded-[10px] border-2 p-3"
-          style={{ borderColor: '#cfcfc4', background: '#fff' }}
+          style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
         >
           <div className="flex items-center justify-between gap-3">
             <span className="text-base font-bold">Edit mode</span>
             <span className={`pill${editMode ? ' pill--on' : ''}`}>{editMode ? 'On' : 'Off'}</span>
           </div>
-          <p className="text-xs font-semibold" style={{ color: '#6c727b' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--ink-soft)' }}>
             Change a picture, add a button or folder, or remove one.
           </p>
           {editMode ? (
             <button
               type="button"
               className="min-h-[52px] rounded-[9px] border-2 font-bold"
-              style={{ borderColor: '#cfcfc4', background: '#fff', color: 'var(--ink)' }}
+              style={{ borderColor: 'var(--line)', background: 'var(--card)', color: 'var(--ink)' }}
               onClick={() => onAction('edit-boards')}
             >
               Turn editing off
@@ -150,10 +150,10 @@ export function CaregiverDrawer({
               className="drawer-item"
               onClick={() => onAction(item.id)}
             >
-              <span style={{ color: 'var(--teal)' }}>{ICONS[item.id]}</span>
+              <span style={{ color: 'var(--focus)' }}>{ICONS[item.id]}</span>
               <span className="flex min-w-0 flex-col">
                 <span className="text-base font-bold leading-tight">{item.label}</span>
-                <span className="text-xs font-semibold leading-snug" style={{ color: '#6c727b' }}>
+                <span className="text-xs font-semibold leading-snug" style={{ color: 'var(--ink-soft)' }}>
                   {item.blurb}
                 </span>
               </span>

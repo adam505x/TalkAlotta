@@ -159,8 +159,8 @@ export function MicButton({
             display: 'grid',
             placeItems: 'center',
             cursor: disabled || busy ? 'default' : 'pointer',
-            background: recording ? '#c4402f' : busy ? '#e7e7df' : '#eaf3f3',
-            color: recording ? '#fff' : '#0e767c',
+            background: recording ? '#c4402f' : busy ? 'var(--paper-dim)' : 'var(--tint-soft)',
+            color: recording ? '#fff' : 'var(--focus)',
             opacity: disabled ? 0.5 : 1,
           }}
         >

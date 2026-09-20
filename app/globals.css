@@ -1489,19 +1489,19 @@ input[type="range"]::-moz-range-thumb {
   width: 100%;
   min-height: 60px;
   padding: 10px 12px;
-  border: 2px solid #cfcfc4;
+  border: 2px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--card);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
 }
 .drawer-item:hover {
-  border-color: var(--teal);
+  border-color: var(--focus);
 }
 .drawer-item[aria-pressed='true'] {
-  border-color: var(--teal);
-  background: #eaf3f3;
+  border-color: var(--focus);
+  background: var(--tint-soft);
 }
 
 /* ------------------------------------------------------- demo controls -----
@@ -1576,7 +1576,19 @@ input[type="range"]::-moz-range-thumb {
    Palette: flag colours for the logo and large shapes, the darkened pair for
    anything carrying text.
 --------------------------------------------------------------------------- */
-.brand-surface {
+/* The palette and the accent remap, shared by the setup flow and every
+   caregiver surface over the board: the drawer, the sheets it opens, the
+   Settings panel and the situation pop-ups. One source for the greens, so the
+   caregiver never meets two different accents doing the same job.
+
+   Deliberately NOT --ink / --paper / --line / --card. Those carry the
+   high-contrast vision themes, and repainting them here would quietly opt every
+   caregiver surface out of a communicator's contrast setting. Accent and type
+   only. */
+.brand-surface,
+.drawer-panel,
+.sheet-card,
+.settings-panel {
   --brand-green: #169b62; /* PMS 347 U */
   --brand-orange: #ff883e; /* PMS 151 U */
   --brand-green-text: #0e7a4c;
@@ -1598,6 +1610,11 @@ input[type="range"]::-moz-range-thumb {
      rest of this flow is green: the one thing on screen to aim at must not
      read as another button. Every edge uses the darkened pair, per the
      palette's rule that anything carrying detail takes the text-safe shade. */
+  font-family: var(--font-text), system-ui, sans-serif;
+}
+
+/* Onboarding only: it owns the whole screen, so it sets its own ground. */
+.brand-surface {
   --tap-accent: var(--brand-orange);
   --tap-accent-ink: var(--brand-orange-text);
   --tap-accent-wash: color-mix(in srgb, var(--brand-orange) 20%, #ffffff);
@@ -1614,8 +1631,44 @@ input[type="range"]::-moz-range-thumb {
 
   background: var(--brand-paper);
   color: var(--brand-ink);
-  font-family: var(--font-text), system-ui, sans-serif;
 }
+
+/* --------------------------------------------- caregiver surface details ---
+   The shared controls, greened by the tokens above rather than by new colours.
+   Scoped to these surfaces so the demo panel, which is not a caregiver screen,
+   keeps the board's teal and is not dragged into this pass.
+-------------------------------------------------------------------------- */
+:is(.drawer-panel, .sheet-card, .settings-panel) .sheet__title {
+  font-family: var(--font-brand), system-ui, sans-serif;
+  font-weight: 500;
+}
+
+:is(.drawer-panel, .sheet-card, .settings-panel) .sheet__label,
+:is(.drawer-panel, .sheet-card, .settings-panel) .sheet__cancel {
+  color: var(--ink-soft);
+}
+
+:is(.drawer-panel, .sheet-card, .settings-panel) .sheet__field {
+  border-color: var(--line);
+}
+:is(.drawer-panel, .sheet-card, .settings-panel) .sheet__field:focus {
+  border-color: var(--focus);
+}
+
+:is(.drawer-panel, .sheet-card, .settings-panel) .chip {
+  border-color: color-mix(in srgb, var(--brand-green) 35%, #ffffff);
+  background: var(--tint-soft);
+  color: var(--brand-green-text);
+}
+:is(.drawer-panel, .sheet-card, .settings-panel) .chip:hover {
+  background: var(--tint-strong);
+}
+:is(.drawer-panel, .sheet-card, .settings-panel) .chip--on {
+  background: var(--brand-green);
+  border-color: var(--brand-green);
+  color: var(--focus-ink);
+}
+
 
 /* Fredoka carries the brand and the headings, Nunito Sans everything that gets
    read. Sizes are the brand sheet's: display 44 / 30 / 21 at weight 500, body
