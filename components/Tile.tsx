@@ -111,7 +111,7 @@ export function Tile({
 
   const text = (
     <span
-      className="cell__label"
+      className={cn('cell__label', label.trim().includes(' ') && 'cell__label--wrap')}
       style={{ fontSize: `clamp(11px, ${1.35 * iconScale}vw, ${Math.round(17 * iconScale)}px)` }}
     >
       {label}

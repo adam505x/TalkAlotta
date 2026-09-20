@@ -1,6 +1,6 @@
 import { desc, eq } from 'drizzle-orm';
 import { db, schema } from './db';
-import { builtInPicture, type WordRole } from './core-words';
+import { builtInPicture, NAV_ICONS, type WordRole } from './core-words';
 import { fixedBoardTerms } from './core-board';
 import { matchConcept } from './symbol-search';
 import { describeContext, type MomentContext } from './context';
@@ -12,6 +12,7 @@ import {
   generateFolders,
   type FolderId,
 } from './generate-folders';
+import { listedPhrases, PHRASES_CAP, PHRASES_PAGE_ID, PHRASES_TITLE } from './phrases';
 
 /**
  * Board assembly.
@@ -25,9 +26,9 @@ import {
  *    never move when the grid size changes, which is the whole point of a fixed
  *    position: muscle memory. yes and no live at opposite ends of that row.
  *
- *  - Below it sit exactly four folders: people, doing, things, describing. Every
- *    situation decomposes into those four, so the folders themselves never move
- *    or change in number. Only what is inside them changes.
+ *  - Below it sit the four situation folders (people, doing, things, describing)
+ *    and a fifth, always-present my phrases folder. The four change with the
+ *    moment; my phrases holds sentences the caregiver pinned from the dashboard.
  *
  *  - What goes inside comes from the moment: the time of day, where they are, the
  *    weather, and any activity that has been typed in. Somewhere specific gets
@@ -156,7 +157,7 @@ async function resolveMany(words: { term: string; role: WordRole }[]): Promise<T
 export interface AssembledBoard {
   /** Lowercased word to picture, for every cell currently on screen. */
   pictures: Record<string, string>;
-  /** Always these four, in this order. Only their contents change. */
+  /** The four situation folders, then my phrases, which does not change with the moment. */
   pages: BoardPage[];
   context: MomentContext;
   contextLabel: string;
@@ -243,6 +244,8 @@ export async function assembleMainBoard(
     });
   }
 
+  pages.push(await assemblePhrasesPage());
+
   // The fixed board's LAYOUT is static data both sides share (lib/core-board.ts).
   // The server's job is only to say what picture each of its words gets, so the
   // page can draw the layout without every picture lookup going to the client.
@@ -270,6 +273,30 @@ export async function assembleMainBoard(
   for (const r of resolved) pictures[r.term.toLowerCase()] = r.imageUrl;
 
   return { pictures, pages, context, contextLabel: describeContext(context), generated };
+}
+
+async function assemblePhrasesPage(): Promise<BoardPage> {
+  const rows = listedPhrases().slice(0, PHRASES_CAP);
+  const tiles: Tile[] = [];
+  for (const term of rows) {
+    const tile = await resolveWord(term, 'noun');
+    tiles.push(
+      tile ?? {
+        term,
+        label: term,
+        role: 'noun',
+        imageUrl: NAV_ICONS.folder,
+        kind: 'word',
+      },
+    );
+  }
+  return {
+    id: PHRASES_PAGE_ID,
+    title: PHRASES_TITLE,
+    tiles,
+    role: 'noun',
+    icon: NAV_ICONS.folder,
+  };
 }
 
 export function touchBoard(boardId: number) {

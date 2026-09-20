@@ -327,7 +327,8 @@ export default function SettingsPage() {
         <section className="flex flex-col gap-2">
           <h2 className="text-xl font-bold">Most said sentences</h2>
           <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
-            The dashboard proper comes later. This is the data it will be built on.
+            The caregiver dashboard, from the board menu, is the place for how
+            the board is being used. This is only what speech has cost.
           </p>
           <ol className="text-sm">
             {stats.topSentences.map((row) => (

@@ -216,6 +216,62 @@ export const utterances = sqliteTable('utterances', {
 });
 
 /**
+ * A word taken back out of the sentence bar.
+ *
+ * The rate matters more than the count. Someone who deletes a third of what they
+ * press is probably hitting the wrong button, and that is a button size problem
+ * rather than a vocabulary one, so the dashboard can suggest bigger buttons on
+ * evidence instead of on a hunch.
+ *
+ * `msSinceAdded` is what separates the two cases: a word taken back within a
+ * couple of seconds was almost certainly a misfire, one taken back after ten was
+ * a change of mind. Counting both as the same thing would make every talkative
+ * day look like a calibration problem.
+ *
+ * `buttonScalePct` records how big the buttons were at the time, so the effect of
+ * making them bigger can actually be seen afterwards rather than assumed.
+ */
+export const deletions = sqliteTable('deletions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  term: text('term').notNull(),
+  label: text('label').notNull(),
+  /** 'last' is one tap back, 'clear' is the double tap that empties the bar. */
+  kind: text('kind').notNull(),
+  msSinceAdded: integer('ms_since_added'),
+  buttonScalePct: integer('button_scale_pct'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+/**
+ * One row per thing that happened on the board.
+ *
+ * The caregiver dashboard reads aggregates of this table. Later, the same rows
+ * are what a model would train on to personalise the board: which button was
+ * pressed, where, when, in what situation, and what was taken back.
+ *
+ * Do not summarise here. Counts are cheap to compute on read; a rolled-up table
+ * would throw away the sequence a model needs.
+ */
+export const analyticsEvents = sqliteTable('analytics_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  type: text('type').notNull(),
+  term: text('term'),
+  label: text('label'),
+  folderId: text('folder_id'),
+  pageId: text('page_id'),
+  cellIndex: integer('cell_index'),
+  location: text('location'),
+  timeBucket: text('time_bucket'),
+  weather: text('weather'),
+  situation: text('situation'),
+  buttonScalePct: integer('button_scale_pct'),
+  sessionId: text('session_id'),
+  source: text('source'),
+  payload: text('payload'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+/**
  * The learning layer's raw record: which symbols were accepted, rejected or
  * replaced for a given word. Ranking reads this to prefer past choices.
  */

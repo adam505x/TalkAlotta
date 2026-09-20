@@ -202,7 +202,7 @@ async function pictureFor(
  */
 const NEGATIONS = new Set(['no', 'not', "don't", 'dont', 'never', 'nothing', 'neither']);
 
-async function iconForPhrase(phrase: string): Promise<string | null> {
+export async function iconForPhrase(phrase: string): Promise<string | null> {
   const tokens = phrase
     .toLowerCase()
     .split(/\s+/)

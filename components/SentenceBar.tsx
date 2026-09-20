@@ -29,6 +29,12 @@ export interface SentenceWord {
   term: string;
   label: string;
   imageUrl: string;
+  /**
+   * When this word was pressed. Carried so a delete can be timed: taken back at
+   * once is a misfire, taken back later is an edit, and the dashboard only counts
+   * the first kind towards suggesting bigger buttons.
+   */
+  addedAt?: number;
 }
 
 export interface SentenceBarProps {

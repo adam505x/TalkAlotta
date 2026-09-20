@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Tile } from '@/components/Tile';
 import { SentenceBar, type SentenceWord } from '@/components/SentenceBar';
 import { Sheet } from '@/components/Sheet';
@@ -9,7 +8,10 @@ import { ScenarioSheet } from '@/components/ScenarioSheet';
 import { PictureSheet, type Candidate } from '@/components/PictureSheet';
 import { CaregiverDrawer, type CaregiverAction } from '@/components/CaregiverDrawer';
 import { AddThingSheet, type AddRequest } from '@/components/AddThingSheet';
+import { DashboardSheet } from '@/components/DashboardSheet';
 import { setSpeechVolume, speak, stopSpeaking, unlockAudio } from '@/lib/speech';
+import { analyticsSessionId, track } from '@/lib/track';
+import type { DashboardRange, DashboardStats } from '@/lib/analytics-types';
 import { NAV_ICONS, timeOfDay, type TimeBucket, type WordRole } from '@/lib/core-words';
 import {
   CORE_COLUMNS,
@@ -72,11 +74,45 @@ interface FolderEntry {
   boardId?: number;
 }
 
-interface Stats {
-  totalUtterances: number;
-  topSentences: { text: string; times: number }[];
-  topWords: { text: string; times: number }[];
-  credits: { characters: number; clips: number; cacheHits: number };
+/**
+ * Records words taken back out of the sentence bar.
+ *
+ * Deleting is how a communicator corrects a mistake, so it must never wait on a
+ * network call: this is sent and forgotten, and a failure is swallowed.
+ */
+async function logDeletions(
+  words: SentenceWord[],
+  kind: 'last' | 'clear',
+  moment: {
+    location?: string | null;
+    timeBucket?: string | null;
+    weather?: string | null;
+    situation?: string | null;
+    folderId?: string | null;
+    pageId?: string | null;
+  },
+) {
+  if (words.length === 0) return;
+  const now = Date.now();
+  try {
+    await fetch('/api/deletion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind,
+        sessionId: analyticsSessionId(),
+        ...moment,
+        words: words.map((word) => ({
+          term: word.term,
+          label: word.label,
+          msSinceAdded: word.addedAt ? now - word.addedAt : null,
+        })),
+      }),
+      keepalive: true,
+    });
+  } catch {
+    /* Counting a mistake must never get in the way of fixing one. */
+  }
 }
 
 type Overlay =
@@ -123,8 +159,6 @@ function useButtonGap(scale: number) {
 }
 
 export default function BoardPage() {
-  const router = useRouter();
-
   const [data, setData] = useState<BoardPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openFolder, setOpenFolder] = useState<string | null>(null);
@@ -137,7 +171,9 @@ export default function BoardPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>({ kind: 'none' });
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [statsRange, setStatsRange] = useState<DashboardRange>('7d');
+  const [pinningPhrase, setPinningPhrase] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -238,23 +274,110 @@ export default function BoardPage() {
     }));
   }, [data]);
 
-  const say = useCallback(async (tile: { term: string; label: string; imageUrl: string }) => {
-    setSpeaking(true);
-    const result = await speak(tile.label, { kind: 'word' });
-    setSpeaking(false);
-    if (result.via === 'browser') setVoiceNote('built-in browser voice');
-    else if (result.via === 'none') setVoiceNote('could not speak that');
-    else setVoiceNote(null);
-    // Every press speaks the word AND adds it to the sentence bar.
-    setSentence((prev) => [
-      ...prev,
-      { term: tile.term, label: tile.label, imageUrl: tile.imageUrl },
-    ]);
+  /**
+   * The moment a press happened, for the event log.
+   *
+   * Read through a ref so a delayed delete still records the time of day and
+   * situation that were true when the tap started, not whatever the demo
+   * control was turned to 350ms later.
+   */
+  const momentRef = useRef({
+    timeBucket: 'morning' as TimeBucket,
+    location: null as string | null,
+    weather: null as string | null,
+    situation: null as string | null,
+    folderId: null as string | null,
+    pageId: 'page:0',
+  });
+  momentRef.current = {
+    timeBucket: demo.timeBucket ?? data?.context.timeBucket ?? timeOfDay(),
+    location: demo.location ?? data?.context.location ?? null,
+    weather: demo.weather ?? data?.context.weather ?? null,
+    situation,
+    folderId: openFolder,
+    pageId: openFolder ?? `page:${corePage}`,
+  };
+
+  const loadStats = useCallback(async (nextRange: DashboardRange) => {
+    try {
+      const res = await fetch(`/api/dashboard?range=${nextRange}`);
+      if (res.ok) setStats((await res.json()) as DashboardStats);
+    } catch {
+      /* the sheet copes with no stats */
+    }
   }, []);
+
+  useEffect(() => {
+    if (overlay.kind !== 'dashboard') return;
+    void loadStats(statsRange);
+  }, [overlay.kind, statsRange, loadStats]);
+
+  const prevFolder = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevFolder.current;
+    if (prev === openFolder) return;
+    const ctx = momentRef.current;
+    if (prev) {
+      track({ type: 'folder_close', source: 'board', ...ctx, folderId: prev });
+    }
+    if (openFolder) {
+      track({
+        type: 'folder_open',
+        label: openFolder,
+        source: 'board',
+        ...ctx,
+        folderId: openFolder,
+        pageId: openFolder,
+      });
+    }
+    prevFolder.current = openFolder;
+  }, [openFolder]);
+
+  const say = useCallback(
+    async (
+      tile: { term: string; label: string; imageUrl: string },
+      extra?: { cellIndex?: number },
+    ) => {
+      const ctx = momentRef.current;
+      track({
+        type: 'press',
+        term: tile.term,
+        label: tile.label,
+        source: 'board',
+        cellIndex: extra?.cellIndex ?? null,
+        ...ctx,
+      });
+      const pieces = tile.label.trim().split(/\s+/).filter(Boolean);
+      setSpeaking(true);
+      const result = await speak(tile.label, {
+        kind: pieces.length > 1 ? 'sentence' : 'word',
+        words: pieces.length > 1 ? pieces : undefined,
+      });
+      setSpeaking(false);
+      if (result.via === 'browser') setVoiceNote('built-in browser voice');
+      else if (result.via === 'none') setVoiceNote('could not speak that');
+      else setVoiceNote(null);
+      // Every press speaks the word AND adds it to the sentence bar. The stamp is
+      // what lets a delete be timed later.
+      setSentence((prev) => [
+        ...prev,
+        { term: tile.term, label: tile.label, imageUrl: tile.imageUrl, addedAt: Date.now() },
+      ]);
+    },
+    [],
+  );
 
   const speakAll = useCallback(async () => {
     if (sentence.length === 0) return;
     const words = sentence.map((w) => w.label);
+    const ctx = momentRef.current;
+    track({
+      type: 'speak_sentence',
+      label: words.join(' '),
+      source: 'sentence_bar',
+      payload: { words: sentence.map((w) => w.term) },
+      ...ctx,
+    });
     stopSpeaking();
     setSpeaking(true);
     // The buttons go over as a list, not a joined string, so the server can leave
@@ -264,14 +387,41 @@ export default function BoardPage() {
     if (result.via === 'browser') setVoiceNote('built-in browser voice');
   }, [sentence]);
 
+  /**
+   * The sentence as it is right now, for the delete handlers.
+   *
+   * A single tap on the delete key fires 350ms later, after the bar has waited to
+   * see whether a second tap is coming. Reading the sentence from a closure would
+   * mean recording whatever was there when the tap started, so a word pressed
+   * during that window would be logged as the one taken back.
+   */
+  const sentenceRef = useRef<SentenceWord[]>([]);
+  useEffect(() => {
+    sentenceRef.current = sentence;
+  }, [sentence]);
+
+  const deleteLast = useCallback(() => {
+    const removed = sentenceRef.current[sentenceRef.current.length - 1];
+    if (!removed) return;
+    void logDeletions([removed], 'last', momentRef.current);
+    setSentence((prev) => prev.slice(0, -1));
+  }, []);
+
+  const clearSentence = useCallback(() => {
+    const removed = sentenceRef.current;
+    if (removed.length === 0) return;
+    void logDeletions(removed, 'clear', momentRef.current);
+    setSentence([]);
+  }, []);
+
   /** In edit mode a tap changes the picture instead of speaking. */
   const onWordTile = useCallback(
-    (tile: ApiTile) => {
+    (tile: ApiTile, extra?: { cellIndex?: number }) => {
       if (editMode) {
         setOverlay({ kind: 'picture', term: tile.term, role: tile.role });
         return;
       }
-      void say(tile);
+      void say(tile, extra);
     },
     [editMode, say],
   );
@@ -291,22 +441,39 @@ export default function BoardPage() {
           setDrawerOpen(false);
           setOverlay({ kind: 'saved' });
           break;
-        case 'dashboard': {
+        case 'dashboard':
           setDrawerOpen(false);
+          setActionError(null);
           setOverlay({ kind: 'dashboard' });
-          try {
-            const res = await fetch('/api/utterance');
-            if (res.ok) setStats((await res.json()) as Stats);
-          } catch {
-            /* the sheet copes with no stats */
-          }
           break;
-        }
         default:
           break;
       }
     },
     [],
+  );
+
+  const pinPhrase = useCallback(
+    async (phrase: string) => {
+      setPinningPhrase(phrase);
+      setActionError(null);
+      try {
+        const res = await fetch('/api/phrases', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phrase }),
+        });
+        const payload = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(payload.error ?? 'Could not add that phrase.');
+        await load();
+        await loadStats(statsRange);
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : 'Could not add that phrase.');
+      } finally {
+        setPinningPhrase(null);
+      }
+    },
+    [load, loadStats, statsRange],
   );
 
   /**
@@ -365,6 +532,15 @@ export default function BoardPage() {
       setBusy(true);
       setActionError(null);
       setSituation(next);
+      if (next) {
+        track({
+          type: 'situation_set',
+          label: next,
+          source: 'board',
+          ...momentRef.current,
+          situation: next,
+        });
+      }
       setOpenFolder(null);
       setCorePage(0);
       setOverlay({ kind: 'none' });
@@ -472,7 +648,7 @@ export default function BoardPage() {
   const tileGap = measuredGap ?? layout.gapPx;
 
   /** Everything a press on the fixed board can mean. */
-  const onFixedCell = (cell: CoreCell) => {
+  const onFixedCell = (cell: CoreCell, index: number) => {
     if (cell.kind === 'folder') {
       if (editMode) {
         setOverlay({
@@ -498,13 +674,16 @@ export default function BoardPage() {
       return;
     }
 
-    void onWordTile({
-      term: cell.label,
-      label: cell.label,
-      role: cell.role,
-      imageUrl: pictureFor(cell),
-      kind: 'word',
-    });
+    void onWordTile(
+      {
+        term: cell.label,
+        label: cell.label,
+        role: cell.role,
+        imageUrl: pictureFor(cell),
+        kind: 'word',
+      },
+      { cellIndex: index },
+    );
   };
 
   /** Back is dead on page one, next on the last page. */
@@ -525,8 +704,8 @@ export default function BoardPage() {
         iconScale={layout.iconScale}
         onOpenMenu={() => setDrawerOpen(true)}
         onSpeakAll={() => void speakAll()}
-        onDeleteLast={() => setSentence((prev) => prev.slice(0, -1))}
-        onClear={() => setSentence([])}
+        onDeleteLast={deleteLast}
+        onClear={clearSentence}
       />
 
       {editMode ? (
@@ -583,7 +762,7 @@ export default function BoardPage() {
                 iconScale={layout.iconScale}
                 editable={editMode && cell.kind === 'word'}
                 disabled={disabledAction(cell)}
-                onActivate={() => onFixedCell(cell)}
+                onActivate={() => onFixedCell(cell, index)}
               />
             ) : (
               <span key={`gap-${index}`} aria-hidden="true" />
@@ -594,9 +773,9 @@ export default function BoardPage() {
         <span aria-hidden="true" className="board-rule shrink-0" />
 
         {/*
-          The strip underneath. Normally the situation button and the four
-          dynamic folders; opening one of those swaps this strip for its words
-          and leaves the three rows above completely alone.
+          The strip underneath. Normally the situation button, the four
+          dynamic folders, and my phrases; opening one of those swaps this strip
+          for its words and leaves the three rows above completely alone.
         */}
         <div
           className="tile-grid w-full shrink-0"
@@ -619,7 +798,7 @@ export default function BoardPage() {
                   role={tile.role}
                   iconScale={layout.iconScale}
                   editable={editMode}
-                  onActivate={() => void onWordTile(tile)}
+                  onActivate={() => void onWordTile(tile, { cellIndex: index + 1 })}
                 />
               ))}
             </>
@@ -640,9 +819,9 @@ export default function BoardPage() {
                   variant="folder"
                   role={page.role}
                   iconScale={layout.iconScale}
-                  editable={editMode}
+                  editable={editMode && page.id !== 'folder:phrases'}
                   onActivate={() => {
-                    if (editMode) {
+                    if (editMode && page.id !== 'folder:phrases') {
                       setOverlay({
                         kind: 'folderEdit',
                         folderId: page.id,
@@ -801,54 +980,22 @@ export default function BoardPage() {
       ) : null}
 
       {overlay.kind === 'dashboard' ? (
-        <Sheet title="Dashboard" onClose={() => setOverlay({ kind: 'none' })}>
-          {!stats || stats.totalUtterances === 0 ? (
-            <p className="text-sm font-semibold" style={{ color: '#6c727b' }}>
-              Nothing spoken yet. Press some buttons and this fills up.
+        <Sheet title="How the board is used" wide onClose={() => setOverlay({ kind: 'none' })}>
+          <DashboardSheet
+            stats={stats}
+            range={statsRange}
+            onRange={setStatsRange}
+            onPinPhrase={(phrase) => void pinPhrase(phrase)}
+            pinning={pinningPhrase}
+          />
+          {actionError && overlay.kind === 'dashboard' ? (
+            <p
+              className="rounded-[10px] p-3 text-sm font-bold"
+              style={{ background: '#fdeae7', color: '#a62f1e' }}
+            >
+              {actionError}
             </p>
-          ) : (
-            <>
-              <p className="sheet__label">Most said sentences</p>
-              {stats.topSentences.length === 0 ? (
-                <p className="text-sm" style={{ color: '#6c727b' }}>
-                  No full sentences yet. Build one and tap the sentence bar to say it.
-                </p>
-              ) : (
-                <ol className="flex flex-col gap-1 text-sm font-semibold">
-                  {stats.topSentences.map((row) => (
-                    <li key={row.text} className="flex justify-between gap-3">
-                      <span className="truncate">{row.text}</span>
-                      <span style={{ color: '#6c727b' }}>{row.times}</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-
-              <p className="sheet__label">Most pressed words</p>
-              <ol className="flex flex-col gap-1 text-sm font-semibold">
-                {stats.topWords.map((row) => (
-                  <li key={row.text} className="flex justify-between gap-3">
-                    <span className="truncate">{row.text}</span>
-                    <span style={{ color: '#6c727b' }}>{row.times}</span>
-                  </li>
-                ))}
-              </ol>
-
-              <p className="sheet__label">Speech credits</p>
-              <ul className="text-sm font-semibold">
-                <li>Characters sent: {stats.credits.characters}</li>
-                <li>Clips generated: {stats.credits.clips}</li>
-                <li>Presses served free from the cache: {stats.credits.cacheHits}</li>
-              </ul>
-            </>
-          )}
-          <button
-            type="button"
-            className="chip self-start"
-            onClick={() => router.push('/settings')}
-          >
-            Open settings
-          </button>
+          ) : null}
         </Sheet>
       ) : null}
     </main>

@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
 import { resolveWord } from '@/lib/board';
 import { recordFeedback } from '@/lib/symbol-search';
+import { recordEvents } from '@/lib/analytics';
 import type { WordRole } from '@/lib/core-words';
 
 export const runtime = 'nodejs';
@@ -132,6 +133,15 @@ export async function POST(request: Request) {
       })
       .run();
     recordFeedback(term, 'accepted', { id: tile.symbolId, imageUrl: tile.imageUrl });
+    recordEvents([
+      {
+        type: 'word_added',
+        term,
+        label: term,
+        folderId,
+        source: 'caregiver',
+      },
+    ]);
     return NextResponse.json({ ok: true, term, imageUrl: tile.imageUrl });
   }
 
@@ -158,6 +168,16 @@ export async function POST(request: Request) {
     const location = body.location ? String(body.location).trim().slice(0, 60) : null;
     db.insert(schema.folderWords).values({ folderId, term, role, location }).run();
     recordFeedback(term, 'accepted', { id: tile.symbolId, imageUrl: tile.imageUrl });
+    recordEvents([
+      {
+        type: 'word_added',
+        term,
+        label: term,
+        folderId,
+        location,
+        source: 'caregiver',
+      },
+    ]);
     return NextResponse.json({ ok: true, term, imageUrl: tile.imageUrl });
   }
 }

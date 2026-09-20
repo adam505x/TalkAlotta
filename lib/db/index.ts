@@ -165,6 +165,37 @@ function createTables(sqlite: Database.Database) {
       spoken_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS deletions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      term TEXT NOT NULL,
+      label TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      ms_since_added INTEGER,
+      button_scale_pct INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS analytics_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      term TEXT,
+      label TEXT,
+      folder_id TEXT,
+      page_id TEXT,
+      cell_index INTEGER,
+      location TEXT,
+      time_bucket TEXT,
+      weather TEXT,
+      situation TEXT,
+      button_scale_pct INTEGER,
+      session_id TEXT,
+      source TEXT,
+      payload TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS analytics_events_type_idx ON analytics_events(type);
+    CREATE INDEX IF NOT EXISTS analytics_events_created_idx ON analytics_events(created_at);
+
     CREATE TABLE IF NOT EXISTS symbol_feedback (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       term TEXT NOT NULL,

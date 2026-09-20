@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { speak } from '@/lib/speech';
+import { track } from '@/lib/track';
 import type { Replies, ReplyIcons } from '@/lib/replies';
 
 /**
@@ -451,8 +452,18 @@ export function ConversationMode({
     setSettled(true);
     // Split so the server treats it as a sentence and gives it one intonation
     // contour. A one-word reply still goes down the single-word path.
+    const params = new URLSearchParams(contextQuery);
+    track({
+      type: 'reply_spoken',
+      label: text,
+      source: 'conversation',
+      timeBucket: params.get('timeBucket'),
+      location: params.get('location'),
+      weather: params.get('weather'),
+      situation: params.get('situation'),
+    });
     await speak(text, { kind: 'sentence', words: text.trim().split(/\s+/) });
-  }, []);
+  }, [contextQuery]);
 
   /**
    * None of these fit: say so out loud, and fetch a different set.

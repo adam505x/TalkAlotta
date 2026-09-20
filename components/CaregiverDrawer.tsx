@@ -68,7 +68,7 @@ const ICONS: Record<CaregiverAction, React.ReactNode> = {
 };
 
 const ITEMS: { id: CaregiverAction; label: string; blurb: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', blurb: 'Most said sentences and words' },
+  { id: 'dashboard', label: 'Dashboard', blurb: 'How the board is being used' },
   { id: 'saved-boards', label: 'Saved boards', blurb: 'Situations already described' },
   { id: 'add-image', label: 'Add image', blurb: 'Upload your own photo for a word' },
   { id: 'settings', label: 'Settings', blurb: 'Size, spacing, eyesight, voice' },
