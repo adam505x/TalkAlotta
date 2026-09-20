@@ -30,6 +30,9 @@ export const profile = sqliteTable('profile', {
   voiceId: text('voice_id'),
   voiceLabel: text('voice_label'),
 
+  /** Playback loudness, 0-100. Applied in the browser via a Web Audio gain. */
+  speechVolume: integer('speech_volume').notNull().default(100),
+
   onboardedAt: text('onboarded_at'),
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -171,7 +174,7 @@ export const uploads = sqliteTable('uploads', {
  * Generated speech, keyed by text + voice + model, stored as bytes.
  *
  * This is what stops repeated presses of the same button spending credits. The
- * audio stream from ElevenLabs is fully buffered before it lands here, so a
+ * audio stream from Deepgram is fully buffered before it lands here, so a
  * second hit never gets an already-consumed stream.
  */
 export const audioCache = sqliteTable(

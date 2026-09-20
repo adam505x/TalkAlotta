@@ -12,6 +12,7 @@ export async function GET() {
     profile,
     layout: getLayout(profile),
     voice: getVoice(profile),
+    suggestedVoice: resolveVoice(profile),
     gridDescription: describePreset(profile.gridIndex),
   });
 }
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
   if ('iconScale' in body) update.iconScale = Number(body.iconScale);
   if ('voiceId' in body) update.voiceId = body.voiceId ? String(body.voiceId) : null;
   if ('voiceLabel' in body) update.voiceLabel = body.voiceLabel ? String(body.voiceLabel) : null;
+  if ('speechVolume' in body) update.speechVolume = Number(body.speechVolume);
   if (body.markOnboarded) update.markOnboarded = true;
 
   // The tap test arrives as an average miss distance. It sets the button size and
@@ -52,6 +54,21 @@ export async function POST(request: Request) {
       if (!('gapPx' in body)) update.gapPx = suggested.gapPx;
       if (!('iconScale' in body)) update.iconScale = suggested.iconScale;
     }
+  }
+
+  // When age, gender or nationality change and the caller did not pick a voice
+  // explicitly, re-resolve so the board speaks with the matching accent.
+  const demographicsChanged =
+    'age' in update || 'gender' in update || 'nationality' in update;
+  if (demographicsChanged && !('voiceId' in update)) {
+    const current = getProfile();
+    const suggested = resolveVoice({
+      age: 'age' in update ? update.age : current.age,
+      gender: 'gender' in update ? update.gender : current.gender,
+      nationality: 'nationality' in update ? update.nationality : current.nationality,
+    });
+    update.voiceId = suggested.voiceId;
+    update.voiceLabel = suggested.label;
   }
 
   const profile = saveProfile(update);

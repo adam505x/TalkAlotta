@@ -9,7 +9,7 @@ import { ScenarioSheet } from '@/components/ScenarioSheet';
 import { PictureSheet, type Candidate } from '@/components/PictureSheet';
 import { CaregiverDrawer, type CaregiverAction } from '@/components/CaregiverDrawer';
 import { AddThingSheet, type AddRequest } from '@/components/AddThingSheet';
-import { speak, stopSpeaking, unlockAudio } from '@/lib/speech';
+import { setSpeechVolume, speak, stopSpeaking, unlockAudio } from '@/lib/speech';
 import { NAV_ICONS, timeOfDay, type TimeBucket, type WordRole } from '@/lib/core-words';
 import {
   CORE_COLUMNS,
@@ -56,6 +56,7 @@ interface BoardPayload {
     vision: string;
   };
   voice: { voiceId: string; label: string };
+  speechVolume?: number;
   onboarded: boolean;
 }
 
@@ -160,6 +161,11 @@ export default function BoardPage() {
     window.addEventListener('pointerdown', handler, { once: true });
     return () => window.removeEventListener('pointerdown', handler);
   }, []);
+
+  // Loudness is a caregiver setting, so the board has to apply it on load.
+  useEffect(() => {
+    if (typeof data?.speechVolume === 'number') setSpeechVolume(data.speechVolume);
+  }, [data?.speechVolume]);
 
   const layout = data?.layout;
 

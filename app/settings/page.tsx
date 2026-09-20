@@ -3,17 +3,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { CountrySelect } from '@/components/ui/country-select';
+import { clearSpeechMemory, speak, unlockAudio, setSpeechVolume } from '@/lib/speech';
 import { describePreset, GRID_PRESETS, type VisionCategory } from '@/lib/sizing';
 
 /**
  * Everything set during setup stays changeable here.
  *
- * Also shows what has been spent with ElevenLabs and how often the cache saved a
+ * Also shows what has been spent with Deepgram and how often the cache saved a
  * call, because on a small credit budget that is the number worth watching.
  */
 
 interface ProfilePayload {
   profile: {
+    age: number | null;
+    gender: string | null;
+    nationality: string | null;
     vision: VisionCategory;
     gridIndex: number;
     gapPx: number;
@@ -21,8 +26,10 @@ interface ProfilePayload {
     routine: string;
     tapErrorPx: number | null;
     voiceLabel: string | null;
+    speechVolume: number;
   };
   voice: { voiceId: string; label: string };
+  suggestedVoice?: { voiceId: string; label: string; rationale: string };
   gridDescription: string;
 }
 
@@ -41,13 +48,37 @@ const VISION_LABELS: Record<string, string> = {
   unknown: 'Not sure',
 };
 
+const GENDER_OPTIONS = [
+  { value: 'female', label: 'Female' },
+  { value: 'male', label: 'Male' },
+  { value: 'other', label: 'Other' },
+  { value: 'prefer not to say', label: 'Prefer not to say' },
+];
+
+const AGE_OPTIONS: { value: number; label: string }[] = [
+  { value: 3, label: 'Under 5' },
+  { value: 6, label: '5 to 8' },
+  { value: 10, label: '9 to 12' },
+  { value: 16, label: '13 to 19' },
+  { value: 30, label: '20 to 39' },
+  { value: 50, label: '40 or older' },
+];
+
 export default function SettingsPage() {
   const [data, setData] = useState<ProfilePayload | null>(null);
   const [stats, setStats] = useState<StatsPayload | null>(null);
   const [gridIndex, setGridIndex] = useState(2);
   const [gapPx, setGapPx] = useState(12);
   const [vision, setVision] = useState<VisionCategory>('none');
+  const [age, setAge] = useState<number | null>(null);
+  const [gender, setGender] = useState('');
+  const [nationality, setNationality] = useState('');
+  const [voiceLabel, setVoiceLabel] = useState('Standard voice');
+  const [voiceRationale, setVoiceRationale] = useState('');
+  const [speechVolume, setSpeechVolumeState] = useState(100);
   const [saved, setSaved] = useState(false);
+  const [voiceTried, setVoiceTried] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     const [profileRes, statsRes] = await Promise.all([
@@ -59,6 +90,14 @@ export default function SettingsPage() {
     setGridIndex(profile.profile.gridIndex);
     setGapPx(profile.profile.gapPx);
     setVision(profile.profile.vision);
+    setAge(profile.profile.age);
+    setGender(profile.profile.gender ?? '');
+    setNationality(profile.profile.nationality ?? '');
+    setVoiceLabel(profile.voice.label ?? profile.profile.voiceLabel ?? 'Standard voice');
+    setVoiceRationale(profile.suggestedVoice?.rationale ?? '');
+    const vol = profile.profile.speechVolume ?? 100;
+    setSpeechVolumeState(vol);
+    setSpeechVolume(vol);
     if (statsRes.ok) setStats((await statsRes.json()) as StatsPayload);
   }, []);
 
@@ -67,15 +106,33 @@ export default function SettingsPage() {
   }, [load]);
 
   const save = useCallback(async () => {
-    await fetch('/api/profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gridIndex, gapPx, vision }),
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    void load();
-  }, [gapPx, gridIndex, load, vision]);
+    setSaving(true);
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gridIndex,
+          gapPx,
+          vision,
+          age,
+          gender: gender || null,
+          nationality: nationality.trim() || null,
+          speechVolume,
+        }),
+      });
+      const body = (await res.json()) as ProfilePayload;
+      clearSpeechMemory();
+      setSpeechVolume(body.profile.speechVolume ?? speechVolume);
+      setVoiceLabel(body.voice.label ?? 'Standard voice');
+      setVoiceRationale(body.suggestedVoice?.rationale ?? '');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      void load();
+    } finally {
+      setSaving(false);
+    }
+  }, [age, gapPx, gender, gridIndex, load, nationality, speechVolume, vision]);
 
   return (
     <main className="page-light safe-top safe-bottom mx-auto flex w-full max-w-3xl flex-col gap-6 p-5">
@@ -139,27 +196,122 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <section className="flex flex-col gap-4">
+        <h2 className="text-xl font-bold">Voice</h2>
+        <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+          Age, gender and nationality pick the accent the board speaks with. Volume applies right
+          away; Save stores it.
+        </p>
+
+        <label className="flex flex-col gap-2">
+          <span className="font-semibold">Speaking volume</span>
+          <input
+            type="range"
+            min={20}
+            max={100}
+            step={5}
+            value={speechVolume}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setSpeechVolumeState(next);
+              setSpeechVolume(next);
+            }}
+            className="min-h-[44px]"
+          />
+          <span className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+            {speechVolume}%
+          </span>
+        </label>
+
+        <div className="flex flex-col gap-2">
+          <span className="font-semibold">Age</span>
+          <div className="flex flex-wrap gap-2">
+            {AGE_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                size="lg"
+                variant={age === option.value ? 'primary' : 'secondary'}
+                onClick={() => setAge(option.value)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="font-semibold">Gender</span>
+          <div className="flex flex-wrap gap-2">
+            {GENDER_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                size="lg"
+                variant={gender === option.value ? 'primary' : 'secondary'}
+                onClick={() => setGender(option.value)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <label className="flex flex-col gap-2">
+          <span className="font-semibold">Nationality</span>
+          <CountrySelect
+            value={nationality}
+            onChange={setNationality}
+            placeholder="Ireland"
+          />
+          <span className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+            Used for the speaking accent. Ireland, England, United States, Australia and similar
+            have dedicated matches.
+          </span>
+        </label>
+
+        <div
+          className="flex flex-col gap-3 rounded-[14px] px-5 py-4"
+          style={{ border: '1px solid var(--line)', background: 'var(--card)' }}
+        >
+          <div>
+            <p className="font-semibold">{voiceLabel}</p>
+            {voiceRationale ? (
+              <p className="mt-1 text-sm" style={{ color: 'var(--ink-soft)' }}>
+                {voiceRationale}
+              </p>
+            ) : null}
+          </div>
+          <Button
+            size="lg"
+            variant="secondary"
+            onClick={async () => {
+              unlockAudio();
+              setVoiceTried(true);
+              await speak('Hello, my name is TalkAlotta.', { kind: 'sentence' });
+            }}
+          >
+            Hear the voice
+          </Button>
+          {voiceTried ? (
+            <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+              If nothing played, check that DEEPGRAM_API_KEY is set, or the browser voice will be
+              used instead.
+            </p>
+          ) : null}
+        </div>
+      </section>
+
       <div className="flex items-center gap-4">
-        <Button size="xl" onClick={() => void save()}>
+        <Button size="xl" disabled={saving} onClick={() => void save()}>
           Save changes
         </Button>
         {saved ? <span className="font-semibold">Saved</span> : null}
       </div>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-xl font-bold">Voice</h2>
-        <p>{data?.voice.label ?? 'Standard voice'}</p>
-        <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
-          Accent and gender matching is not wired up yet. The answers from setup are stored, so
-          adding real voices is a change to the voice lookup alone.
-        </p>
-      </section>
-
-      <section className="flex flex-col gap-2">
         <h2 className="text-xl font-bold">Speech credits</h2>
         {stats ? (
           <ul className="text-sm">
-            <li>Characters sent to ElevenLabs: {stats.credits.characters}</li>
+            <li>Characters sent to Deepgram: {stats.credits.characters}</li>
             <li>Clips generated: {stats.credits.clips}</li>
             <li>Presses served from the cache, costing nothing: {stats.credits.cacheHits}</li>
             <li>Words and sentences spoken in total: {stats.totalUtterances}</li>

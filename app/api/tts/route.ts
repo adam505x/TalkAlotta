@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
  * carries x-tts-cached so the client can show whether a press cost anything.
  */
 export async function POST(request: Request) {
-  let body: { text?: unknown; kind?: unknown; boardId?: unknown };
+  let body: { text?: unknown; kind?: unknown; boardId?: unknown; record?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   if (!isTtsConfigured()) {
     // The client falls back to the browser voice when this happens.
     return NextResponse.json(
-      { error: 'ELEVENLABS_API_KEY is not set.', fallback: 'browser' },
+      { error: 'DEEPGRAM_API_KEY is not set.', fallback: 'browser' },
       { status: 503 },
     );
   }
@@ -39,18 +39,21 @@ export async function POST(request: Request) {
   try {
     const result = await synthesize(text, voiceId);
 
-    // Record what was actually said. The dashboard of most-said sentences is
-    // deliberately later, but its data starts accumulating from the first press.
-    const kind = body.kind === 'sentence' ? 'sentence' : 'word';
-    db.insert(schema.utterances)
-      .values({
-        text,
-        kind,
-        wordCount: text.split(/\s+/).filter(Boolean).length,
-        boardId: typeof body.boardId === 'number' ? body.boardId : null,
-        timeBucket: timeOfDay(),
-      })
-      .run();
+    // "say it" plays words one-by-one and logs the full sentence itself, so those
+    // per-word fetches pass record: false.
+    const shouldRecord = body.record !== false;
+    if (shouldRecord) {
+      const kind = body.kind === 'sentence' ? 'sentence' : 'word';
+      db.insert(schema.utterances)
+        .values({
+          text,
+          kind,
+          wordCount: text.split(/\s+/).filter(Boolean).length,
+          boardId: typeof body.boardId === 'number' ? body.boardId : null,
+          timeBucket: timeOfDay(),
+        })
+        .run();
+    }
 
     const bytes = new Uint8Array(result.bytes);
     return new Response(bytes, {
