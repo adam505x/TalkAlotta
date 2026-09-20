@@ -515,6 +515,10 @@ export default function OnboardingPage() {
 
   const stepNumber = stepIndex + 1;
 
+  // Questions after the first one ask about the communicator by name. Blank only
+  // if someone goes back and clears it, and those questions fall back to "they".
+  const askedName = name.trim();
+
   return (
     /* The device safe-area insets sit on the wrapper, not on main. As plain
        unlayered rules they beat any padding utility on the same element, so on
@@ -639,7 +643,7 @@ export default function OnboardingPage() {
       {step === 'profile_age' ? (
         <StepLayout
           center
-          title="How old are they?"
+          title={askedName ? `How old is ${askedName}?` : 'How old are they?'}
           action={
             <Button
               size="xl"
