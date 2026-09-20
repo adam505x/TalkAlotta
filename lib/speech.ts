@@ -29,10 +29,14 @@ let unlocked = false;
 let volumePercent = 100;
 
 /**
- * Gain at 100% volume. Above 1 because HTMLAudioElement.volume cannot go past 1,
- * and Aura clips (especially short words) run quiet.
+ * Gain at 100% volume.
+ *
+ * Stays at 1. The server levels every clip to a fixed loudness with headroom, so
+ * the bytes already arrive as loud as they can be without distorting. Raising
+ * this would only clip them — the old multiplier existed to rescue quiet Aura
+ * clips, and that is now handled before the audio is sent.
  */
-const GAIN_AT_FULL = 3.2;
+const GAIN_AT_FULL = 1;
 
 /** 30ms of silence, used to unlock audio playback on the first touch. */
 const SILENCE =
@@ -190,8 +194,8 @@ export async function speak(
   if (!clean) return { spoken: false, via: 'none' };
 
   const kind = options.kind ?? 'word';
-  // v4: WAV clips with a padded tail, and breaks between words in a sentence.
-  const memoryKey = `v4:${kind}:${clean}`;
+  // v5: clips levelled to a fixed loudness, padded both ends.
+  const memoryKey = `v5:${kind}:${clean}`;
   const el = element();
 
   const held = memory.get(memoryKey);
