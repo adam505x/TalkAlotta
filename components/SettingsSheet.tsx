@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { CountrySelect } from '@/components/ui/country-select';
 import { OptionGroup, OptionRow, sliderFill } from '@/components/ui/option-list';
 import { PaletteDots } from '@/components/ui/palette-dots';
-import { clearSpeechMemory, setSpeechVolume, speak, unlockAudio } from '@/lib/speech';
+import { clearSpeechMemory, speak, unlockAudio } from '@/lib/speech';
 import {
   BOARD_COLS,
   BOARD_ROWS,
@@ -141,7 +141,6 @@ interface ProfilePayload {
     iconScale: number;
     tapErrorPx: number | null;
     voiceLabel: string | null;
-    speechVolume: number;
   };
   voice: { voiceId: string; label: string };
   suggestedVoice?: { voiceId: string; label: string; rationale: string };
@@ -202,7 +201,6 @@ export function SettingsSheet({
   const [nationality, setNationality] = useState('');
   const [voiceLabel, setVoiceLabel] = useState('Standard voice');
   const [voiceRationale, setVoiceRationale] = useState('');
-  const [speechVolume, setSpeechVolumeState] = useState(100);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -233,9 +231,6 @@ export function SettingsSheet({
     setNationality(p.nationality ?? '');
     setVoiceLabel(payload.voice?.label ?? p.voiceLabel ?? 'Standard voice');
     setVoiceRationale(payload.suggestedVoice?.rationale ?? '');
-    const volume = p.speechVolume ?? 100;
-    setSpeechVolumeState(volume);
-    setSpeechVolume(volume);
     committed.current = {
       vision: p.vision ?? 'unknown',
       colorVision: parseColorVision(p.colorVision),
@@ -295,13 +290,11 @@ export function SettingsSheet({
           age,
           gender: gender || null,
           nationality: nationality.trim() || null,
-          speechVolume,
         }),
       });
       const body = (await res.json()) as ProfilePayload & { error?: string };
       if (!res.ok) throw new Error(body.error ?? 'Could not save that.');
       clearSpeechMemory();
-      setSpeechVolume(body.profile.speechVolume ?? speechVolume);
       setVoiceLabel(body.voice?.label ?? 'Standard voice');
       setVoiceRationale(body.suggestedVoice?.rationale ?? '');
       committed.current = { vision, colorVision };
@@ -313,7 +306,7 @@ export function SettingsSheet({
     } finally {
       setSaving(false);
     }
-  }, [age, buttonScale, colorVision, gender, nationality, onSaved, speechVolume, vision]);
+  }, [age, buttonScale, colorVision, gender, nationality, onSaved, vision]);
 
   /**
    * Low vision and CVI set a floor under the button size (lib/sizing.ts). The
@@ -526,32 +519,9 @@ export function SettingsSheet({
 
             {loaded && tab === 'voice' ? (
               <>
-                <Section title="Loudness" blurb="Applies as you drag it. Save keeps it.">
-                  <label className="flex flex-col gap-2">
-                    <span className="text-[15px] font-semibold">Speaking volume</span>
-                    <input
-                      type="range"
-                      min={20}
-                      max={100}
-                      step={5}
-                      value={speechVolume}
-                      aria-label="Speaking volume"
-                      onChange={(e) => {
-                        const next = Number(e.target.value);
-                        setSpeechVolumeState(next);
-                        setSpeechVolume(next);
-                      }}
-                      style={sliderFill(speechVolume, 20, 100)}
-                    />
-                    <span className="type-footnote" style={{ color: 'var(--ink-soft)' }}>
-                      {speechVolume}%
-                    </span>
-                  </label>
-                </Section>
-
                 <Section
                   title="The voice"
-                  blurb="Worked out from age, gender and country. Change any of those and the voice is re-picked when you save."
+                  blurb="Worked out from age, gender and country. Change any of those and the voice is re-picked when you save. Loudness is set with the volume buttons on the side of the iPad."
                 >
                   <div className="settings-card flex flex-col gap-3">
                     <div>

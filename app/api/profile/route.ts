@@ -63,7 +63,6 @@ export async function POST(request: Request) {
   }
   if ('voiceId' in body) update.voiceId = body.voiceId ? String(body.voiceId) : null;
   if ('voiceLabel' in body) update.voiceLabel = body.voiceLabel ? String(body.voiceLabel) : null;
-  if ('speechVolume' in body) update.speechVolume = Number(body.speechVolume);
   if (body.markOnboarded) update.markOnboarded = true;
 
   // The tap test arrives as an average miss distance. It sets the BUTTON SIZE and
