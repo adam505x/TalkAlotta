@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { MicButton } from './MicButton';
 
 /**
  * Describe what is happening.
@@ -12,6 +13,11 @@ import { useState } from 'react';
  *
  * The four suggestions are picked for the current time of day and place, so the
  * common cases take one tap instead of typing.
+ *
+ * Speaking it is the point, though. The caregiver doing this has a child in one
+ * hand - typing a sentence is the one thing they cannot do at that moment. The
+ * microphone puts the transcript in the box rather than submitting it, so a
+ * misheard word is corrected before the board changes.
  */
 export function ScenarioSheet({
   recommended,
@@ -50,15 +56,22 @@ export function ScenarioSheet({
             if (text.trim()) onPick(text.trim());
           }}
         >
-          <input
-            className="sheet__field"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="art class, choosing between paint and pencils"
-            maxLength={200}
-            autoFocus
-            aria-label="Describe what is happening"
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              className="sheet__field"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="art class, choosing between paint and pencils"
+              maxLength={200}
+              autoFocus
+              aria-label="Describe what is happening"
+              style={{ paddingRight: 56 }}
+            />
+            <MicButton
+              disabled={busy}
+              onTranscript={(heard) => setText(heard)}
+            />
+          </div>
         </form>
 
         <p className="sheet__label">Suggested now</p>
@@ -69,9 +82,6 @@ export function ScenarioSheet({
             </button>
           ))}
         </div>
-
-        {/* TODO(voice-input): hold-to-talk goes here. Deepgram prerecorded
-            endpoint, no streaming needed, falling back to this box. */}
 
         {busy ? (
           <p className="text-sm font-semibold" style={{ color: '#6c727b' }}>
