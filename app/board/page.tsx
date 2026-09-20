@@ -148,6 +148,17 @@ export default function BoardPage() {
   });
   const [situation, setSituation] = useState<string | null>(null);
 
+  // The moment the board is reading, as query params. Built once here so the
+  // board load and the reply generator cannot drift apart about where we are.
+  const contextQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (demo.timeBucket) params.set('timeBucket', demo.timeBucket);
+    if (demo.location) params.set('location', demo.location);
+    if (demo.weather) params.set('weather', demo.weather);
+    if (situation) params.set('situation', situation);
+    return params.toString();
+  }, [demo, situation]);
+
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -677,6 +688,7 @@ export default function BoardPage() {
         <ScenarioSheet
           recommended={data.recommended}
           current={situation}
+          contextQuery={contextQuery}
           busy={busy}
           error={actionError}
           onPick={(next) => void applySituation(next)}
