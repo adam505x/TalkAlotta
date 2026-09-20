@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // better-sqlite3 is a native module; it must not be bundled by webpack/turbopack.
-  serverExternalPackages: ['better-sqlite3'],
+  // @elastic/elasticsearch is pure JS but pulls in undici and its own transport,
+  // which bundle badly and gain nothing from being bundled on the server.
+  serverExternalPackages: ['better-sqlite3', '@elastic/elasticsearch'],
   images: { unoptimized: true },
 
   // Dev only. Next blocks cross-origin requests to dev assets, so an iPad
