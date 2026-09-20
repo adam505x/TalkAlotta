@@ -1,6 +1,9 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { normalizeKeyword, searchSymbolTerm, type SymbolResult } from './opensymbols';
 import { searchArasaac } from './arasaac';
+import { elasticEnabled, elasticSearchSymbols } from './elastic-symbols';
+import { phrasingsFor } from './aliases.mjs';
+import { compactTerm } from './symbol-query.mjs';
 import { db, schema } from './db';
 import type { WordRole } from './core-words';
 
@@ -38,26 +41,10 @@ const SOURCE_TRUST: Record<string, number> = {
 };
 
 /**
- * Seed of the canonical concept dictionary: alternate phrasings to retry when a
- * concept scores badly. Deterministic, so it is cacheable rather than guessed at
- * each time.
- * TODO(aliases): grow this as real scenarios expose more failures.
+ * ALIASES moved to lib/aliases.mjs so the Elasticsearch ingest script can read
+ * the same list and build its synonym set from it. Behaviour here is unchanged:
+ * matchConcept still retries a concept with these phrasings.
  */
-const ALIASES: Record<string, string[]> = {
-  finished: ['done', 'all done', 'complete'],
-  toilet: ['bathroom', 'wc', 'potty'],
-  sore: ['pain', 'hurt', 'ouch'],
-  thirsty: ['thirst', 'drink'],
-  hungry: ['hunger', 'eat'],
-  television: ['tv', 'watch tv'],
-  teddy: ['teddy bear', 'soft toy'],
-  coat: ['jacket'],
-  mum: ['mother', 'mom'],
-  dad: ['father'],
-  me: ['myself', 'i'],
-  'thank you': ['thanks'],
-  story: ['book', 'read'],
-};
 
 export interface Candidate extends SymbolResult {
   /** 0 to 1. Real score, not a per-tier constant. */
@@ -113,6 +100,14 @@ function scoreCandidate(term: string, item: SymbolResult): number {
   const got = tokenize(item.name ?? '');
   if (wanted.length === 0 || got.length === 0) return 0;
 
+  // Spacing is not a difference in meaning. ARASAAC keywords a paintbrush as
+  // one token and the board asks for "paint brush"; token overlap scores that
+  // zero, which is how the exactly-right pictogram used to end up in the review
+  // queue. Compare the letters and ignore where the spaces fell.
+  if (compactTerm(term) === compactTerm(item.name ?? '')) {
+    return Math.max(0, Math.min(1, 1 * (0.8 + 0.2 * (SOURCE_TRUST[item.source] ?? 0.7))));
+  }
+
   const wantedSet = new Set(wanted);
   const gotSet = new Set(got);
   const hits = wanted.filter((t) => gotSet.has(t)).length;
@@ -149,10 +144,62 @@ function scoreCandidate(term: string, item: SymbolResult): number {
   return Math.max(0, Math.min(1, score));
 }
 
+/**
+ * The best this symbol scores against any phrasing of the concept.
+ *
+ * scoreCandidate compares surface strings, so it cannot know that a pictogram
+ * labelled "soft drink" is the right answer for "fizzy drink". Retrieval already
+ * knows - the synonym set told it - and without this the search finds the right
+ * picture and the scorer then sends it to the review queue anyway.
+ *
+ * Phrasings are passed in rather than looked up per candidate, because this runs
+ * once for every keyword of every hit.
+ */
+function scoreConcept(phrasings: string[], item: SymbolResult): number {
+  let best = 0;
+  for (const phrasing of phrasings) {
+    best = Math.max(best, scoreCandidate(phrasing, item));
+    if (best >= 1) break;
+  }
+  return best;
+}
+
+/**
+ * Drops exact repeats, keeping every distinct KEYWORD of a pictogram.
+ *
+ * The key includes the name on purpose. lib/arasaac.ts and lib/elastic-symbols.ts
+ * both emit one result per keyword, precisely so the scorer can compare the term
+ * against the keyword that actually matched. Keying on imageUrl alone collapsed
+ * a pictogram to whichever keyword happened to come first, so searching "granny"
+ * kept only the candidate named "grandmother" and scored it zero - throwing away
+ * the "granny" keyword sitting on the very same pictogram.
+ *
+ * Duplicate PICTURES are collapsed later, by collapseByImage, once the scores
+ * exist to choose the best keyword with.
+ */
 function dedupe(items: SymbolResult[]): SymbolResult[] {
   const seen = new Set<string>();
   return items.filter((i) => {
-    const key = i.imageUrl || `${i.repoKey}:${i.name}`;
+    const key = i.imageUrl
+      ? `${i.imageUrl}::${(i.name ?? '').toLowerCase()}`
+      : `${i.repoKey}:${i.name}`;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * One entry per picture, keeping the best-scoring keyword for each.
+ *
+ * Runs after sorting, so the first occurrence of an image is its highest score.
+ * This is what stops the caregiver's replace-picture sheet showing the same
+ * drawing three times under three different labels.
+ */
+function collapseByImage(candidates: Candidate[]): Candidate[] {
+  const seen = new Set<string>();
+  return candidates.filter((c) => {
+    const key = c.imageUrl || `${c.repoKey}:${c.name}`;
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -162,22 +209,50 @@ function dedupe(items: SymbolResult[]): SymbolResult[] {
 /**
  * One round of library search for a single phrasing.
  *
- * ARASAAC is asked first and, when it answers well, is the only source used, so
- * the board stays visually consistent. OpenSymbols is only brought in to rescue a
- * word ARASAAC handles badly, such as "paint brush", where ARASAAC's closest
- * match is a paint roller and Mulberry has an exact paint brush.
+ * Dispatches on SYMBOL_SEARCH. The legacy path below is untouched and stays the
+ * safety net: Elastic being misconfigured, unreachable, out of trial or simply
+ * empty for this term must never be the reason a board opens blank in front of a
+ * child. Any throw or an empty result set falls through to the live libraries.
+ *
+ * Note the empty-result fallback is deliberate and not just an error guard. A
+ * term genuinely absent from the index is indistinguishable, from here, from an
+ * index that was never ingested, and the legacy path costs one HTTP call to
+ * rule it out.
  */
 async function searchOnce(term: string, limit: number): Promise<SymbolResult[]> {
-  const preferred = await searchArasaac(term, { locale: LOCALE, limit });
+  if (elasticEnabled()) {
+    try {
+      const hits = await elasticSearchSymbols(term, { locale: LOCALE, limit });
+      if (hits.length > 0) {
+        const best = hits.reduce((max, item) => Math.max(max, scoreCandidate(term, item)), 0);
+        if (best >= CONFIDENCE_THRESHOLD) return dedupe(hits);
 
-  const bestPreferred = preferred.reduce(
-    (max, item) => Math.max(max, scoreCandidate(term, item)),
-    0,
-  );
-  if (bestPreferred >= CONFIDENCE_THRESHOLD) {
-    return dedupe(preferred);
+        // Weak, so widen exactly as the legacy path does. Returning a poor
+        // Elastic hit just because Elastic answered would make the flag a
+        // downgrade for every word ARASAAC covers badly: the index always has
+        // SOMETHING to say, so without this the OpenSymbols rescue could never
+        // fire again and words like "granny" would quietly get worse.
+        const rescued = await rescueFromOpenSymbols(term, limit);
+        return dedupe([...hits, ...rescued]);
+      }
+      console.warn(`[symbol-search] elastic returned nothing for "${term}", using libraries`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[symbol-search] elastic failed for "${term}" (${message}), using libraries`);
+    }
   }
 
+  return legacySearchOnce(term, limit);
+}
+
+/**
+ * The OpenSymbols widening, shared by both retrieval paths.
+ *
+ * Mulberry and Tawasol first because they are drawn closest to ARASAAC, then a
+ * general search. Failures are swallowed: this is already the fallback, and a
+ * dead OpenSymbols must not take down a board that has usable pictograms.
+ */
+async function rescueFromOpenSymbols(term: string, limit: number): Promise<SymbolResult[]> {
   const [favored, general] = await Promise.all([
     searchSymbolTerm({
       term,
@@ -191,10 +266,31 @@ async function searchOnce(term: string, limit: number): Promise<SymbolResult[]> 
   const rescued: SymbolResult[] = [];
   if (favored) rescued.push(...favored.results);
   if (general) rescued.push(...general.results);
+  return rescued;
+}
+
+/**
+ * The original live-library search, kept whole.
+ *
+ * ARASAAC is asked first and, when it answers well, is the only source used, so
+ * the board stays visually consistent. OpenSymbols is only brought in to rescue a
+ * word ARASAAC handles badly, such as "paint brush", where ARASAAC's closest
+ * match is a paint roller and Mulberry has an exact paint brush.
+ */
+async function legacySearchOnce(term: string, limit: number): Promise<SymbolResult[]> {
+  const preferred = await searchArasaac(term, { locale: LOCALE, limit });
+
+  const bestPreferred = preferred.reduce(
+    (max, item) => Math.max(max, scoreCandidate(term, item)),
+    0,
+  );
+  if (bestPreferred >= CONFIDENCE_THRESHOLD) {
+    return dedupe(preferred);
+  }
 
   // ARASAAC results stay in the pool, so if nothing better turns up the closest
   // pictogram is still offered rather than nothing at all.
-  return dedupe([...preferred, ...rescued]);
+  return dedupe([...preferred, ...(await rescueFromOpenSymbols(term, limit))]);
 }
 
 /** Caregiver override for this word, if any. Always wins. */
@@ -264,7 +360,7 @@ export async function matchConcept(
   const override = overrideFor(term);
 
   const boosts = learnedBoosts(term);
-  const phrasings = [term, ...(ALIASES[term] ?? [])];
+  const phrasings = phrasingsFor(term);
 
   let pool: Candidate[] = [];
 
@@ -272,7 +368,7 @@ export async function matchConcept(
     queriedAs.push(phrasing);
     const raw = await searchOnce(phrasing, limit);
     const scored = raw.map<Candidate>((item) => {
-      const base = scoreCandidate(term, item);
+      const base = scoreConcept(phrasings, item);
       const boosted = Math.max(0, Math.min(1, base + (boosts.get(item.imageUrl) ?? 0)));
       return {
         ...item,
@@ -289,7 +385,9 @@ export async function matchConcept(
 
   pool.sort((a, b) => b.score - a.score);
 
-  const ranked = override ? [override, ...pool] : pool;
+  // Collapse after sorting and with the override already in front, so a pinned
+  // picture wins and never appears twice.
+  const ranked = collapseByImage(override ? [override, ...pool] : pool);
   const best = ranked[0] ?? null;
 
   return {

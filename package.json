@@ -11,10 +11,15 @@
     "typecheck": "tsc --noEmit",
     "reset": "node scripts/reset-demo.mjs",
     "warm": "node scripts/warm.mjs",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "symbols:index": "node scripts/index-symbols.mjs",
+    "symbols:images": "node scripts/index-symbols.mjs --images",
+    "symbols:check": "node scripts/check-symbols.mjs",
+    "symbols:clear-cache": "node scripts/clear-word-cache.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
+    "@elastic/elasticsearch": "^9.5.1",
     "@elevenlabs/elevenlabs-js": "^2.68.0",
     "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
