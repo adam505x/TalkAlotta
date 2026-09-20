@@ -1049,8 +1049,10 @@ input[type="range"]::-moz-range-thumb {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-  background: var(--teal);
-  color: #fff;
+  /* Takes the accent of whatever surface it sits on, which is the caregiver
+     drawer and its green. It is a caregiver control, not a board one. */
+  background: var(--focus);
+  color: var(--focus-ink);
 }
 .hold__fill {
   position: absolute;
